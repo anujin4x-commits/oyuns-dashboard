@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-
+const API_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
 const ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
@@ -421,17 +421,46 @@ export default function App() {
   const [editBalFor, setEditBalFor] = useState(null);
   const [showDebt, setShowDebt]     = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const b = await ld("oyuns:bal5");
-      const t = await ld("oyuns:tx5");
-      const d = await ld("oyuns:debt5");
-      if (b) setBalances(b);
-      if (t) setTx(t);
-      if (d) setDebts(d);
-      setLoading(false);
-    })();
-  }, []);
+useEffect(() => {
+  async function loadFromSheet() {
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+
+      // Sheet row format:
+      // [accountId, type, amount, date, counterparty, note]
+      const formatted = data.map((row, index) => ({
+        id: index.toString(),
+        accountId: row[0],
+        type: row[1],
+        amount: Number(row[2]),
+        date: row[3],
+        counterparty: row[4],
+        note: row[5],
+      }));
+
+      setTx(formatted);
+
+      // Balance дахин тооцоолох
+      const newBalances = { ...DEFAULT_BAL };
+
+      formatted.forEach(tx => {
+        newBalances[tx.accountId] =
+          (newBalances[tx.accountId] || 0) +
+          (tx.type === "Орлого" ? tx.amount : -tx.amount);
+      });
+
+      setBalances(newBalances);
+
+    } catch (err) {
+      console.error("Sheet load error:", err);
+    }
+
+    setLoading(false);
+  }
+
+  loadFromSheet();
+}, []);
 
   const saveBal = useCallback(async b => { setBalances(b); await sv("oyuns:bal5", b); }, []);
   const saveTx  = useCallback(async t => { setTx(t);       await sv("oyuns:tx5",  t); }, []);
@@ -445,15 +474,25 @@ export default function App() {
     await saveBal(nb);
   }
 
-  async function handleDeleteTx(id) {
-    const tx = transactions.find(t => t.id === id);
-    if (!tx) return;
-    const nb = { ...balances };
-    nb[tx.accountId] = (nb[tx.accountId] || 0) + (tx.type === "Орлого" ? -tx.amount : tx.amount);
-    await saveTx(transactions.filter(t => t.id !== id));
-    await saveBal(nb);
-  }
+async function handleSaveTx(tx) {
+  // 1. Google Sheet рүү хадгалах
+  await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tx)
+  });
 
+  // 2. Local state update (UI immediate update)
+  const updated = [...transactions, tx];
+  setTx(updated);
+
+  const nb = { ...balances };
+  nb[tx.accountId] =
+    (nb[tx.accountId] || 0) +
+    (tx.type === "Орлого" ? tx.amount : -tx.amount);
+
+  setBalances(nb);
+}
   const addTxAcc   = ACCOUNTS.find(a => a.id === addTxFor);
   const viewTxAcc  = ACCOUNTS.find(a => a.id === viewTxFor);
   const editBalAcc = ACCOUNTS.find(a => a.id === editBalFor);
