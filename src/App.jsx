@@ -197,7 +197,7 @@ function AddTxModal({ acc, onClose, onSave }) {
         <input style={inp} value={cp} onChange={e => setCp(e.target.value)} placeholder="Компани / хүний нэр" />
       </Field>
 
-      {/* 4. Дүн */}
+      {/* 4. Үнийн дүн */}
       <Field label={`Дүн (${acc.currency})`}>
         <input style={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
       </Field>
