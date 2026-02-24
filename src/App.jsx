@@ -30,12 +30,6 @@ function fmt(n, cur) {
   return (n < 0 ? "-" : "") + s + " " + (cur === "USDT" ? "USDT" : CUR_SYM[cur]);
 }
 
-async function ld(key) {
-  try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch { return null; }
-}
-async function sv(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-}
 
 const inp = {
   width:"100%", padding:"10px 12px", borderRadius:"10px", border:"1.5px solid #e2e8f0",
@@ -461,18 +455,6 @@ useEffect(() => {
 
   loadFromSheet();
 }, []);
-
-  const saveBal = useCallback(async b => { setBalances(b); await sv("oyuns:bal5", b); }, []);
-  const saveTx  = useCallback(async t => { setTx(t);       await sv("oyuns:tx5",  t); }, []);
-  const saveDb  = useCallback(async d => { setDebts(d);    await sv("oyuns:debt5",d); }, []);
-
-  async function handleSaveTx(tx) {
-    const updated = [...transactions, tx];
-    const nb = { ...balances };
-    nb[tx.accountId] = (nb[tx.accountId] || 0) + (tx.type === "Орлого" ? tx.amount : -tx.amount);
-    await saveTx(updated);
-    await saveBal(nb);
-  }
 
 async function handleSaveTx(tx) {
   // 1. Google Sheet рүү хадгалах
