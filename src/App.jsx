@@ -303,187 +303,332 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
 // ════════════════════════════════
 // FINANCE DASHBOARD COMPONENT
 // ════════════════════════════════
+
+// ══════════════════════════════════════════════════
+// FINANCE DASHBOARD — Гүйлгээний мэдээлэл
+// ══════════════════════════════════════════════════
+
 function fmtMNT(n) {
-  if (!n || isNaN(n)) return "₮0";
-  return (n < 0 ? "-₮" : "₮") + Math.abs(n).toLocaleString("mn-MN", {minimumFractionDigits:0,maximumFractionDigits:0});
+  if (!n && n !== 0) return "₮0";
+  const abs = Math.abs(Number(n));
+  const fmt = abs >= 1e9 ? (abs/1e9).toFixed(2)+"тэр" : abs >= 1e6 ? (abs/1e6).toFixed(1)+"сая" : abs.toLocaleString("mn-MN",{maximumFractionDigits:0});
+  return (Number(n)<0?"-₮":"₮") + fmt;
+}
+function fmtMNTFull(n) {
+  if (!n && n!==0) return "₮0";
+  return (Number(n)<0?"-₮":"₮") + Math.abs(Number(n)).toLocaleString("mn-MN",{maximumFractionDigits:0});
 }
 function fmtUSD(n) {
-  if (!n || isNaN(n)) return "$0";
-  return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2});
+  if (!n && n!==0) return "$0.00";
+  return (Number(n)<0?"-$":"$") + Math.abs(Number(n)).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
-function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth }) {
-  const statuses = ["Бүгд", "Баталгаажсан", "Цуцлагдсан"];
+function StatCard({label, value, sub, color, icon}) {
+  return (
+    <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:`5px solid ${color}`}}>
+      <div style={{fontSize:"11px",fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"8px"}}>{icon} {label}</div>
+      <div style={{fontWeight:900,fontSize:"20px",color:"#0f172a",lineHeight:1}}>{value}</div>
+      {sub && <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"5px"}}>{sub}</div>}
+    </div>
+  );
+}
 
-  // Months from data
-  const months = ["Бүгд", ...Array.from(new Set(rows.map(r => r.date?.slice(0,7)).filter(Boolean))).sort().reverse()];
+function MiniBar({value, max, color}) {
+  const pct = max > 0 ? Math.min((Math.abs(value)/max)*100, 100) : 0;
+  return (
+    <div style={{background:"#f1f5f9",borderRadius:"4px",height:"6px",overflow:"hidden",marginTop:"4px"}}>
+      <div style={{background:color,height:"100%",borderRadius:"4px",width:`${pct}%`,transition:"width 0.4s ease"}}/>
+    </div>
+  );
+}
+
+function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth, period, setPeriod }) {
+  const [sortCol, setSortCol] = useState("date");
+  const [sortDir, setSortDir] = useState(-1);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+
+  // Unique months
+  const months = ["Бүгд", ...Array.from(new Set(
+    rows.map(r => r.date?.slice(0,7)).filter(Boolean)
+  )).sort().reverse()];
+
+  // Unique statuses
+  const statuses = ["Бүгд", ...Array.from(new Set(rows.map(r=>r.status).filter(Boolean)))];
 
   // Filter
+  const q = search.toLowerCase();
   const filtered = rows.filter(r => {
-    const matchStatus = status === "Бүгд" || r.status === status;
-    const matchMonth  = month === "Бүгд" || r.date?.startsWith(month);
-    const matchSearch = !search || r.counterparty?.toLowerCase().includes(search.toLowerCase()) || r.description?.toLowerCase().includes(search.toLowerCase()) || r.invoice?.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchMonth && matchSearch;
+    const mOk = month==="Бүгд" || r.date?.startsWith(month);
+    const sOk = status==="Бүгд" || r.status===status;
+    const qOk = !q || r.counterparty?.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q) || r.invoice?.toLowerCase().includes(q) || r.admin?.toLowerCase().includes(q);
+    return mOk && sOk && qOk;
   });
 
-  // Summary (Баталгаажсан мөрүүдээр)
-  const confirmed = filtered.filter(r => r.status === "Баталгаажсан");
-  const totalAmount  = confirmed.reduce((s,r) => s + (r.amount||0), 0);
-  const totalProfitMNT = confirmed.reduce((s,r) => s + (r.profitMNT||0), 0);
-  const totalProfitUSD = confirmed.reduce((s,r) => s + (r.profitUSD||0), 0);
-  const totalCancelled = filtered.filter(r => r.status === "Цуцлагдсан").reduce((s,r) => s + (r.amount||0), 0);
-
-  // Monthly breakdown
-  const monthlyMap = {};
-  confirmed.forEach(r => {
-    const m = r.date?.slice(0,7) || "?";
-    if (!monthlyMap[m]) monthlyMap[m] = { amount:0, profitMNT:0, profitUSD:0, count:0 };
-    monthlyMap[m].amount   += r.amount || 0;
-    monthlyMap[m].profitMNT+= r.profitMNT || 0;
-    monthlyMap[m].profitUSD+= r.profitUSD || 0;
-    monthlyMap[m].count++;
+  // Sort
+  const sorted = [...filtered].sort((a,b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (typeof av === "string") return av.localeCompare(bv) * sortDir;
+    return ((av||0) - (bv||0)) * sortDir;
   });
-  const monthlyData = Object.entries(monthlyMap).sort((a,b) => b[0].localeCompare(a[0])).slice(0,12);
 
-  // Top counterparties
+  // Confirmed rows only for stats
+  const conf = filtered.filter(r => r.status === "Баталгаажсан" || r.status === "Хяналтанд");
+
+  const totAmount   = conf.reduce((s,r)=>s+(r.amount||0),0);
+  const totProfMNT  = conf.reduce((s,r)=>s+(r.profitMNT||0),0);
+  const totProfUSD  = conf.reduce((s,r)=>s+(r.profitUSD||0),0);
+  const totReceived = conf.reduce((s,r)=>s+(r.received||0),0);
+  const totDiff     = conf.reduce((s,r)=>s+(r.difference||0),0);
+  const totTotal    = conf.reduce((s,r)=>s+(r.totalPrice||0),0);
+  const cancelled   = filtered.filter(r=>r.status==="Цуцлагдсан");
+  const totCancelled= cancelled.reduce((s,r)=>s+(r.amount||0),0);
+
+  // ── GRAPH DATA ──
+  // Period grouping
+  function groupKey(dateStr) {
+    if (!dateStr) return "?";
+    if (period==="өдөр")  return dateStr.slice(0,10);
+    if (period==="долоо хоног") {
+      const d = new Date(dateStr);
+      const day = d.getDay()||7;
+      const mon = new Date(d); mon.setDate(d.getDate()-day+1);
+      return mon.toISOString().slice(0,10)+" 7хон";
+    }
+    return dateStr.slice(0,7);
+  }
+
+  const graphMap = {};
+  conf.forEach(r => {
+    const k = groupKey(r.date);
+    if (!graphMap[k]) graphMap[k] = {profitMNT:0, profitUSD:0, amount:0, count:0};
+    graphMap[k].profitMNT += r.profitMNT||0;
+    graphMap[k].profitUSD += r.profitUSD||0;
+    graphMap[k].amount    += r.amount||0;
+    graphMap[k].count++;
+  });
+  const graphData = Object.entries(graphMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-24);
+  const maxProfit = Math.max(...graphData.map(([,v])=>Math.abs(v.profitMNT)),1);
+  const maxAmount = Math.max(...graphData.map(([,v])=>v.amount),1);
+
+  // ── TOP COUNTERPARTIES ──
   const cpMap = {};
-  confirmed.forEach(r => {
-    const cp = r.counterparty || "Тодорхойгүй";
-    if (!cpMap[cp]) cpMap[cp] = { amount:0, profitMNT:0, profitUSD:0, count:0 };
-    cpMap[cp].amount    += r.amount || 0;
-    cpMap[cp].profitMNT += r.profitMNT || 0;
-    cpMap[cp].profitUSD += r.profitUSD || 0;
+  conf.forEach(r => {
+    const cp = r.counterparty||"Тодорхойгүй";
+    if (!cpMap[cp]) cpMap[cp]={amount:0,profitMNT:0,profitUSD:0,count:0};
+    cpMap[cp].amount    += r.amount||0;
+    cpMap[cp].profitMNT += r.profitMNT||0;
+    cpMap[cp].profitUSD += r.profitUSD||0;
     cpMap[cp].count++;
   });
-  const topCP = Object.entries(cpMap).sort((a,b) => b[1].profitMNT - a[1].profitMNT).slice(0,10);
+  const topCP = Object.entries(cpMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT).slice(0,8);
+  const maxCPProfit = Math.max(...topCP.map(([,v])=>v.profitMNT),1);
 
-  // Bar chart max
-  const maxAmount = Math.max(...monthlyData.map(([,v]) => v.amount), 1);
+  // ── CATEGORY ──
+  const catMap = {};
+  conf.forEach(r => {
+    const c = r.category||"Бусад";
+    if (!catMap[c]) catMap[c]={amount:0,profitMNT:0,count:0};
+    catMap[c].amount    += r.amount||0;
+    catMap[c].profitMNT += r.profitMNT||0;
+    catMap[c].count++;
+  });
+  const topCat = Object.entries(catMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT).slice(0,6);
 
-  const cardStyle = {background:"#fff",borderRadius:"16px",padding:"16px 18px",boxShadow:"0 2px 10px rgba(0,0,0,0.06)",border:"1px solid #e8edf5"};
+  const COLORS = ["#1a56db","#0e9f6e","#7e3af2","#f59e0b","#ef4444","#06b6d4","#f97316","#ec4899"];
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:"#94a3b8",fontSize:"14px"}}>Ачаалж байна...</div>;
-  if (!rows.length) return <div style={{textAlign:"center",padding:"60px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл байхгүй байна</div>;
+  const cardStyle = {background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)"};
+
+  function SortTh({col,label}) {
+    return <th onClick={()=>{setSortCol(col);setSortDir(sortCol===col?-sortDir:-1);setPage(0);}}
+      style={{padding:"9px 10px",textAlign:"left",fontWeight:700,color:"#64748b",borderBottom:"2px solid #e2e8f0",cursor:"pointer",whiteSpace:"nowrap",userSelect:"none",fontSize:"11px"}}>
+      {label} {sortCol===col?(sortDir===-1?"↓":"↑"):""}
+    </th>;
+  }
+
+  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачаалж байна...</div>;
+  if (!rows.length) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл олдсонгүй</div>;
+
+  const pageRows = sorted.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
+  const totalPages = Math.ceil(sorted.length/PAGE_SIZE);
 
   return (
-    <div style={{paddingBottom:"40px"}}>
+    <div style={{paddingBottom:"50px"}}>
 
-      {/* FILTERS */}
-      <div style={{display:"flex",gap:"8px",marginBottom:"16px",flexWrap:"wrap"}}>
-        <input
-          value={search} onChange={e=>setSearch(e.target.value)}
+      {/* ── FILTERS ── */}
+      <div style={{display:"flex",gap:"8px",marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}}>
+        <input value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}
           placeholder="🔍 Харилцагч, тайлбар, invoice..."
-          style={{flex:"1",minWidth:"200px",padding:"10px 14px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",outline:"none"}}
-        />
-        <select value={status} onChange={e=>setStatus(e.target.value)}
+          style={{flex:"1",minWidth:"180px",padding:"10px 14px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",outline:"none",background:"#fff"}}/>
+        <select value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}
           style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
           {statuses.map(s=><option key={s}>{s}</option>)}
         </select>
-        <select value={month} onChange={e=>setMonth(e.target.value)}
+        <select value={month} onChange={e=>{setMonth(e.target.value);setPage(0);}}
           style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
           {months.map(m=><option key={m}>{m}</option>)}
         </select>
-        <div style={{padding:"10px 14px",borderRadius:"10px",background:"#f1f5f9",fontSize:"13px",color:"#64748b",fontWeight:600}}>
+        <div style={{padding:"10px 14px",borderRadius:"10px",background:"#f1f5f9",fontSize:"12px",color:"#64748b",fontWeight:700,whiteSpace:"nowrap"}}>
           {filtered.length} гүйлгээ
         </div>
       </div>
 
-      {/* SUMMARY CARDS */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"12px",marginBottom:"20px"}}>
-        <div style={{...cardStyle,borderLeft:"5px solid #0e9f6e"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#0e9f6e",textTransform:"uppercase",marginBottom:"6px"}}>Нийт зарлага</div>
-          <div style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{fmtMNT(totalAmount)}</div>
-          <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"2px"}}>{confirmed.length} гүйлгээ</div>
+      {/* ── SUMMARY CARDS ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"20px"}}>
+        <StatCard label="Нийт зарлага"    value={fmtMNT(totAmount)}   sub={`${conf.length} гүйлгээ`}       color="#1a56db" icon="💰"/>
+        <StatCard label="Ашиг (₮)"        value={fmtMNT(totProfMNT)}  sub={fmtUSD(totProfUSD)+" доллар"}   color={totProfMNT>=0?"#0e9f6e":"#ef4444"} icon="📈"/>
+        <StatCard label="Ашиг ($)"        value={fmtUSD(totProfUSD)}  sub={`₮/$ дундаж харьцаа`}          color="#7e3af2" icon="💵"/>
+        <StatCard label="Хүлээж авсан"    value={fmtMNT(totReceived)} sub={`Зөрүү: ${fmtMNT(totDiff)}`}   color="#0e9f6e" icon="✅"/>
+        <StatCard label="Нийт үнийн дүн"  value={fmtMNT(totTotal)}    sub={`${conf.length} гүйлгээ`}       color="#f59e0b" icon="🧾"/>
+        <StatCard label="Цуцлагдсан"      value={fmtMNT(totCancelled)} sub={`${cancelled.length} гүйлгээ`} color="#ef4444" icon="❌"/>
+      </div>
+
+      {/* ── CHARTS ROW ── */}
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"16px",marginBottom:"20px"}}>
+
+        {/* PROFIT CHART */}
+        <div style={cardStyle}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
+            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>📊 Ашгийн график</div>
+            <div style={{display:"flex",gap:"4px"}}>
+              {["өдөр","долоо хоног","сар"].map(p=>(
+                <button key={p} onClick={()=>setPeriod(p)}
+                  style={{padding:"5px 10px",borderRadius:"7px",border:"none",cursor:"pointer",fontSize:"11px",fontWeight:700,fontFamily:"inherit",
+                    background:period===p?"#1a56db":"#f1f5f9",color:period===p?"#fff":"#64748b"}}>
+                  {p==="өдөр"?"Өдөр":p==="долоо хоног"?"7 хон":"Сар"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <div style={{display:"flex",gap:"4px",alignItems:"flex-end",minWidth:`${graphData.length*40}px`,height:"120px",padding:"0 4px"}}>
+              {graphData.map(([k,v])=>{
+                const h = Math.max((Math.abs(v.profitMNT)/maxProfit)*100, 2);
+                const pos = v.profitMNT >= 0;
+                return (
+                  <div key={k} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",minWidth:"30px"}}>
+                    <div style={{fontSize:"9px",color:pos?"#0e9f6e":"#ef4444",fontWeight:700}}>{fmtMNT(v.profitMNT)}</div>
+                    <div style={{width:"100%",height:`${h}%`,background:pos?"linear-gradient(180deg,#0e9f6e,#6ee7b7)":"linear-gradient(180deg,#ef4444,#fca5a5)",borderRadius:"4px 4px 0 0",minHeight:"4px"}}/>
+                    <div style={{fontSize:"8px",color:"#94a3b8",textAlign:"center",transform:"rotate(-40deg)",transformOrigin:"center",whiteSpace:"nowrap",marginTop:"4px"}}>{k.slice(5)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div style={{...cardStyle,borderLeft:"5px solid #1a56db"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",marginBottom:"6px"}}>Ашиг (төгрөг)</div>
-          <div style={{fontWeight:900,fontSize:"18px",color:totalProfitMNT>=0?"#0e9f6e":"#ef4444"}}>{fmtMNT(totalProfitMNT)}</div>
-        </div>
-        <div style={{...cardStyle,borderLeft:"5px solid #7e3af2"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#7e3af2",textTransform:"uppercase",marginBottom:"6px"}}>Ашиг (доллар)</div>
-          <div style={{fontWeight:900,fontSize:"18px",color:totalProfitUSD>=0?"#0e9f6e":"#ef4444"}}>{fmtUSD(totalProfitUSD)}</div>
-        </div>
-        <div style={{...cardStyle,borderLeft:"5px solid #ef4444"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#ef4444",textTransform:"uppercase",marginBottom:"6px"}}>Цуцлагдсан</div>
-          <div style={{fontWeight:900,fontSize:"18px",color:"#ef4444"}}>{fmtMNT(totalCancelled)}</div>
-          <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"2px"}}>{filtered.filter(r=>r.status==="Цуцлагдсан").length} гүйлгээ</div>
+
+        {/* TOP CATEGORIES */}
+        <div style={cardStyle}>
+          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>🏷️ Ангилал</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+            {topCat.length ? topCat.map(([c,v],i)=>(
+              <div key={c}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"2px"}}>
+                  <span style={{fontSize:"12px",fontWeight:700,color:"#0f172a"}}>{c||"Бусад"}</span>
+                  <span style={{fontSize:"11px",fontWeight:700,color:COLORS[i%COLORS.length]}}>{fmtMNT(v.profitMNT)}</span>
+                </div>
+                <MiniBar value={v.profitMNT} max={topCat[0][1].profitMNT} color={COLORS[i%COLORS.length]}/>
+                <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"1px"}}>{v.count} гүйлгээ · {fmtMNT(v.amount)}</div>
+              </div>
+            )) : <div style={{color:"#94a3b8",fontSize:"13px"}}>Ангилал байхгүй</div>}
+          </div>
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px",marginBottom:"20px"}}>
-
-        {/* MONTHLY BAR CHART */}
-        <div style={cardStyle}>
-          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>📅 Сараар задаргаа</div>
-          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-            {monthlyData.map(([m, v]) => (
-              <div key={m}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"3px"}}>
-                  <span style={{fontSize:"11px",fontWeight:600,color:"#475569"}}>{m}</span>
-                  <span style={{fontSize:"11px",fontWeight:700,color:"#0f172a"}}>{fmtMNT(v.amount)}</span>
+      {/* TOP COUNTERPARTIES */}
+      <div style={{...cardStyle,marginBottom:"20px"}}>
+        <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>👥 Топ харилцагчид (ашгаар)</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:"10px"}}>
+          {topCP.map(([cp,v],i)=>(
+            <div key={cp} style={{display:"flex",gap:"10px",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px"}}>
+              <div style={{width:"30px",height:"30px",borderRadius:"50%",background:COLORS[i%COLORS.length]+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:900,color:COLORS[i%COLORS.length],flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"13px",fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cp}</div>
+                <div style={{fontSize:"11px",color:"#64748b"}}>{fmtMNT(v.amount)} · {v.count}x</div>
+                <div style={{display:"flex",gap:"8px",marginTop:"2px"}}>
+                  <span style={{fontSize:"11px",fontWeight:700,color:v.profitMNT>=0?"#0e9f6e":"#ef4444"}}>{fmtMNT(v.profitMNT)}</span>
+                  <span style={{fontSize:"11px",color:"#94a3b8"}}>{fmtUSD(v.profitUSD)}</span>
                 </div>
-                <div style={{background:"#f1f5f9",borderRadius:"6px",height:"8px",overflow:"hidden"}}>
-                  <div style={{background:"linear-gradient(90deg,#1a56db,#60a5fa)",height:"100%",borderRadius:"6px",width:`${(v.amount/maxAmount)*100}%`,transition:"width 0.3s"}}/>
-                </div>
-                <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>Ашиг: {fmtMNT(v.profitMNT)} / {fmtUSD(v.profitUSD)} · {v.count} гүйлгээ</div>
+                <MiniBar value={v.profitMNT} max={maxCPProfit} color={COLORS[i%COLORS.length]}/>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* TOP COUNTERPARTIES */}
-        <div style={cardStyle}>
-          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>👥 Топ харилцагчид</div>
-          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-            {topCP.map(([cp, v], i) => (
-              <div key={cp} style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                <div style={{width:"22px",height:"22px",borderRadius:"50%",background:["#1a56db","#0e9f6e","#7e3af2","#f59e0b","#ef4444","#06b6d4","#f97316","#84cc16","#ec4899","#6366f1"][i]+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",fontWeight:800,color:["#1a56db","#0e9f6e","#7e3af2","#f59e0b","#ef4444","#06b6d4","#f97316","#84cc16","#ec4899","#6366f1"][i],flexShrink:0}}>{i+1}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:"12px",fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cp}</div>
-                  <div style={{fontSize:"11px",color:"#94a3b8"}}>{fmtMNT(v.amount)} · {fmtUSD(v.profitUSD)} ашиг · {v.count}x</div>
-                </div>
-              </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* TRANSACTIONS TABLE */}
       <div style={cardStyle}>
-        <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>📋 Гүйлгээний хүснэгт</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}}>
+          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>📋 Гүйлгээний дэлгэрэнгүй</div>
+          <div style={{fontSize:"12px",color:"#94a3b8"}}>{sorted.length} нийт · {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,sorted.length)}</div>
+        </div>
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
             <thead>
               <tr style={{background:"#f8fafc"}}>
-                {["№","Огноо","Харилцагч","Админ","Зарлага","Ашиг ₮","Ашиг $","Төлөв"].map(h=>(
-                  <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:700,color:"#64748b",borderBottom:"2px solid #e2e8f0",whiteSpace:"nowrap"}}>{h}</th>
-                ))}
+                <SortTh col="no"           label="№"/>
+                <SortTh col="date"         label="Огноо"/>
+                <SortTh col="counterparty" label="Харилцагч"/>
+                <SortTh col="description"  label="Тайлбар"/>
+                <SortTh col="amount"       label="Зарлага"/>
+                <SortTh col="rateOrtog"    label="Өртөг ₮/$"/>
+                <SortTh col="rateZarakh"   label="Зарах ₮/$"/>
+                <SortTh col="profitMNT"    label="Ашиг ₮"/>
+                <SortTh col="profitUSD"    label="Ашиг $"/>
+                <SortTh col="totalPrice"   label="Нийт үнэ"/>
+                <SortTh col="received"     label="Авсан үнэ"/>
+                <SortTh col="difference"   label="Зөрүү"/>
+                <SortTh col="category"     label="Ангилал"/>
+                <SortTh col="status"       label="Төлөв"/>
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0,200).map((r,i)=>(
-                <tr key={i} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafa"}}>
-                  <td style={{padding:"7px 10px",color:"#94a3b8",fontWeight:600}}>{r.no}</td>
-                  <td style={{padding:"7px 10px",color:"#475569",whiteSpace:"nowrap"}}>{r.date}</td>
-                  <td style={{padding:"7px 10px",color:"#0f172a",fontWeight:600,maxWidth:"160px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.counterparty}</td>
-                  <td style={{padding:"7px 10px",color:"#475569"}}>{r.admin}</td>
-                  <td style={{padding:"7px 10px",fontWeight:700,color:"#0f172a",whiteSpace:"nowrap"}}>{fmtMNT(r.amount)}</td>
-                  <td style={{padding:"7px 10px",fontWeight:700,color:r.profitMNT>0?"#0e9f6e":r.profitMNT<0?"#ef4444":"#94a3b8",whiteSpace:"nowrap"}}>{fmtMNT(r.profitMNT)}</td>
-                  <td style={{padding:"7px 10px",fontWeight:700,color:r.profitUSD>0?"#0e9f6e":r.profitUSD<0?"#ef4444":"#94a3b8",whiteSpace:"nowrap"}}>{fmtUSD(r.profitUSD)}</td>
-                  <td style={{padding:"7px 10px"}}>
-                    <span style={{fontSize:"10px",fontWeight:700,padding:"3px 8px",borderRadius:"6px",background:r.status==="Баталгаажсан"?"#d1fae5":r.status==="Цуцлагдсан"?"#fee2e2":"#f1f5f9",color:r.status==="Баталгаажсан"?"#065f46":r.status==="Цуцлагдсан"?"#991b1b":"#64748b",whiteSpace:"nowrap"}}>{r.status||"—"}</span>
-                  </td>
-                </tr>
-              ))}
+              {pageRows.map((r,i)=>{
+                const statusColor = r.status==="Баталгаажсан"||r.status==="Хяналтанд"?"#d1fae5":r.status==="Цуцлагдсан"?"#fee2e2":"#fef3c7";
+                const statusText  = r.status==="Баталгаажсан"||r.status==="Хяналтанд"?"#065f46":r.status==="Цуцлагдсан"?"#991b1b":"#92400e";
+                return (
+                  <tr key={i} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafa"}}>
+                    <td style={{padding:"7px 8px",color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>{r.no}</td>
+                    <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{r.date}</td>
+                    <td style={{padding:"7px 8px",fontWeight:700,color:"#0f172a",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.counterparty}>{r.counterparty}</td>
+                    <td style={{padding:"7px 8px",color:"#475569",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.description}>{r.description}</td>
+                    <td style={{padding:"7px 8px",fontWeight:700,color:"#0f172a",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.amount)}</td>
+                    <td style={{padding:"7px 8px",color:"#64748b",whiteSpace:"nowrap",textAlign:"right"}}>{r.rateOrtog||""}</td>
+                    <td style={{padding:"7px 8px",color:"#64748b",whiteSpace:"nowrap",textAlign:"right"}}>{r.rateZarakh||""}</td>
+                    <td style={{padding:"7px 8px",fontWeight:700,color:r.profitMNT>0?"#0e9f6e":r.profitMNT<0?"#ef4444":"#94a3b8",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.profitMNT)}</td>
+                    <td style={{padding:"7px 8px",fontWeight:700,color:r.profitUSD>0?"#0e9f6e":r.profitUSD<0?"#ef4444":"#94a3b8",whiteSpace:"nowrap",textAlign:"right"}}>{fmtUSD(r.profitUSD)}</td>
+                    <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.totalPrice)}</td>
+                    <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.received)}</td>
+                    <td style={{padding:"7px 8px",fontWeight:600,color:r.difference<0?"#ef4444":r.difference>0?"#0e9f6e":"#94a3b8",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.difference)}</td>
+                    <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{r.category}</td>
+                    <td style={{padding:"7px 8px"}}>
+                      <span style={{fontSize:"10px",fontWeight:700,padding:"3px 7px",borderRadius:"6px",background:statusColor,color:statusText,whiteSpace:"nowrap"}}>{r.status||"—"}</span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          {filtered.length > 200 && <div style={{textAlign:"center",padding:"12px",fontSize:"12px",color:"#94a3b8"}}>Нийт {filtered.length} мөрөөс 200-г харуулж байна. Filter ашиглан нарийсгана уу.</div>}
         </div>
+
+        {/* PAGINATION */}
+        {totalPages > 1 && (
+          <div style={{display:"flex",gap:"6px",justifyContent:"center",marginTop:"16px",flexWrap:"wrap"}}>
+            <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+              style={{padding:"7px 14px",borderRadius:"8px",border:"1px solid #e2e8f0",background:page===0?"#f8fafc":"#fff",cursor:page===0?"default":"pointer",fontSize:"12px",fontFamily:"inherit",fontWeight:600}}>← Өмнөх</button>
+            {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
+              const p = totalPages<=7 ? i : Math.max(0,Math.min(page-3,totalPages-7))+i;
+              return <button key={p} onClick={()=>setPage(p)}
+                style={{padding:"7px 12px",borderRadius:"8px",border:"1px solid #e2e8f0",background:page===p?"#1a56db":"#fff",color:page===p?"#fff":"#0f172a",cursor:"pointer",fontSize:"12px",fontFamily:"inherit",fontWeight:700}}>{p+1}</button>;
+            })}
+            <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+              style={{padding:"7px 14px",borderRadius:"8px",border:"1px solid #e2e8f0",background:page===totalPages-1?"#f8fafc":"#fff",cursor:page===totalPages-1?"default":"pointer",fontSize:"12px",fontFamily:"inherit",fontWeight:600}}>Дараах →</button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 
 export default function App() {
   useEffect(() => {
@@ -508,6 +653,7 @@ export default function App() {
   const [financeSearch, setFinanceSearch] = useState("");
   const [financeStatus, setFinanceStatus] = useState("Бүгд");
   const [financeMonth, setFinanceMonth] = useState("Бүгд");
+  const [financePeriod, setFinancePeriod] = useState("сар");
 
 
   useEffect(() => {
@@ -601,7 +747,7 @@ export default function App() {
         ))}
 
 
-        {tab==="finance" && <FinanceDashboard rows={financeRows} loading={financeLoading} search={financeSearch} setSearch={setFinanceSearch} status={financeStatus} setStatus={setFinanceStatus} month={financeMonth} setMonth={setFinanceMonth}/>}
+        {tab==="finance" && <FinanceDashboard rows={financeRows} loading={financeLoading} search={financeSearch} setSearch={setFinanceSearch} status={financeStatus} setStatus={setFinanceStatus} month={financeMonth} setMonth={setFinanceMonth} period={financePeriod} setPeriod={setFinancePeriod}/>}
         {tab==="debts" && (
           <DebtSection debts={debts} onAdd={()=>setShowDebt(true)}
             onToggle={async id=>{
