@@ -300,6 +300,13 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+  }, []);
+
   const [tab, setTab]           = useState("dashboard");
   const [balances, setBalances] = useState(DEFAULT_BAL);
   const [transactions, setTx]   = useState([]);
@@ -352,18 +359,14 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
 
   return (
-    <div style={{fontFamily:"'Noto Sans','Segoe UI',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
+    <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
       <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"14px 18px",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            <div style={{background:"linear-gradient(135deg,#1a56db,#60a5fa)",borderRadius:"10px",width:"36px",height:"36px",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:"17px"}}>O</div>
-            <div>
-              <div style={{fontWeight:900,fontSize:"16px",color:"#0f172a",lineHeight:1}}>OYUNS</div>
-              <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"2px"}}>Санхүүгийн бүртгэл</div>
-            </div>
+            <img src="https://raw.githubusercontent.com/anujin4x-commits/oyuns-dashboard/main/public/logo.png" alt="OYUNS Finance" style={{height:"40px",width:"auto",objectFit:"contain"}} />
           </div>
           <div style={{fontSize:"12px",color:"#94a3b8"}}>{new Date().toLocaleDateString("mn-MN")}</div>
         </div>
