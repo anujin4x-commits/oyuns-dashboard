@@ -32,7 +32,7 @@ function fmt(n, cur) {
 // ════════════════════════════════════════════════════
 // Apps Script API — allSheets fetch (CORS тойрох арга)
 // ════════════════════════════════════════════════════
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
+const SCRIPT_URL = "https://oyuns-dashboard.anujin4x.workers.dev";
 
 async function apiGet(params) {
   const url = SCRIPT_URL + "?" + new URLSearchParams(params);
