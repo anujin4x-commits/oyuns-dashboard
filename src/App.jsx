@@ -345,28 +345,46 @@ function LiveClock() {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-  
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
+
   // Монголын цаг: UTC+8 (Улаанбаатар)
-  const UB_OFFSET = 8 * 60; // minutes
+  const UB_OFFSET = 8 * 60;
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   const mn = new Date(utcMs + UB_OFFSET * 60000);
+
   const yy = mn.getFullYear();
-  const mo = String(mn.getMonth()+1).padStart(2,'0');
-  const dd = String(mn.getDate()).padStart(2,'0');
-  const hh = String(mn.getHours()).padStart(2,'0');
-  const mm = String(mn.getMinutes()).padStart(2,'0');
-  const ss = String(mn.getSeconds()).padStart(2,'0');
+  const mo = String(mn.getMonth() + 1).padStart(2, "0");
+  const dd = String(mn.getDate()).padStart(2, "0");
+  const hh = String(mn.getHours()).padStart(2, "0");
+  const mm = String(mn.getMinutes()).padStart(2, "0");
+  const ss = String(mn.getSeconds()).padStart(2, "0");
+
   return (
-    <div style={{textAlign:"right"}}>
-      <div style={{fontSize:"18px",fontWeight:900,color:"#fff",letterSpacing:"0.05em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{hh}:{mm}:{ss}</div>
-      <div style={{fontSize:"11px",color:"#93c5fd",marginTop:"2px",fontWeight:600}}>{yy}.{mo}.{dd}</div>
+    <div style={{ textAlign: "right" }}>
+      <div
+        style={{
+          fontSize: "18px",
+          fontWeight: 900,
+          color: "#fff",
+          letterSpacing: "0.05em",
+          lineHeight: 1,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {hh}:{mm}:{ss}
+      </div>
+      <div
+        style={{
+          fontSize: "11px",
+          color: "#93c5fd",
+          marginTop: "2px",
+          fontWeight: 600,
+        }}
+      >
+        {yy}.{mo}.{dd}
+      </div>
     </div>
   );
 }
-
 
 function LineChart({ data, maxProfit }) {
   const W = 600, H = 140, PAD = { t:24, r:16, b:28, l:64 };
