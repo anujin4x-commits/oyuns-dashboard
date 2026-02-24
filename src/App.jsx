@@ -334,6 +334,73 @@ function StatCard({label, value, sub, color, icon}) {
   );
 }
 
+
+function LineChart({ data, maxProfit }) {
+  const W = 600, H = 140, PAD = { t:24, r:16, b:28, l:64 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+  if (!data.length) return <div style={{color:"#94a3b8",fontSize:"13px",padding:"20px 0"}}>Өгөгдөл байхгүй</div>;
+
+  const vals = data.map(([,v]) => v.profitMNT);
+  const minV = Math.min(...vals, 0);
+  const maxV = Math.max(...vals, 0);
+  const range = maxV - minV || 1;
+
+  function xPos(i) { return PAD.l + (i / Math.max(data.length-1,1)) * iW; }
+  function yPos(v) { return PAD.t + iH - ((v - minV) / range) * iH; }
+
+  const pts = data.map(([,v],i) => `${xPos(i)},${yPos(v.profitMNT)}`).join(" ");
+  const zeroY = yPos(0);
+
+  // Area fill path
+  const areaPos = `M${xPos(0)},${zeroY} ` +
+    data.map(([,v],i) => v.profitMNT>=0 ? `L${xPos(i)},${yPos(v.profitMNT)}` : "").filter(Boolean).join(" ") + ` L${xPos(data.length-1)},${zeroY} Z`;
+
+  // Ticks on Y
+  const ticks = [minV, (minV+maxV)/2, maxV].map(v => ({v, y: yPos(v)}));
+
+  return (
+    <div style={{overflowX:"auto"}}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:"320px",height:`${H}px`}}>
+        <defs>
+          <linearGradient id="lg_pos" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#0e9f6e" stopOpacity="0.25"/>
+            <stop offset="100%" stopColor="#0e9f6e" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {/* Grid lines */}
+        {ticks.map((t,i) => (
+          <g key={i}>
+            <line x1={PAD.l} y1={t.y} x2={W-PAD.r} y2={t.y} stroke="#f1f5f9" strokeWidth="1"/>
+            <text x={PAD.l-4} y={t.y+4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtMNT(t.v)}</text>
+          </g>
+        ))}
+        {/* Zero line */}
+        <line x1={PAD.l} y1={zeroY} x2={W-PAD.r} y2={zeroY} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4,2"/>
+        {/* Area */}
+        <path d={`M${xPos(0)},${zeroY} ${data.map(([,v],i)=>`L${xPos(i)},${yPos(v.profitMNT)}`).join(" ")} L${xPos(data.length-1)},${zeroY} Z`}
+          fill="url(#lg_pos)" opacity="0.7"/>
+        {/* Line */}
+        <polyline points={pts} fill="none" stroke="#0e9f6e" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+        {/* Dots + labels */}
+        {data.map(([k,v],i) => {
+          const cx = xPos(i), cy = yPos(v.profitMNT);
+          const pos = v.profitMNT >= 0;
+          const showEvery = data.length > 16 ? Math.ceil(data.length/12) : 1;
+          return (
+            <g key={k}>
+              <circle cx={cx} cy={cy} r="3.5" fill={pos?"#0e9f6e":"#ef4444"} stroke="#fff" strokeWidth="1.5"/>
+              {i%showEvery===0 && <text x={cx} y={H-6} textAnchor="middle" fontSize="8" fill="#94a3b8" transform={data.length>10?`rotate(-35,${cx},${H-6})`:""}>
+                {k.slice(5)}
+              </text>}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 function MiniBar({value, max, color}) {
   const pct = max > 0 ? Math.min((Math.abs(value)/max)*100, 100) : 0;
   return (
@@ -354,12 +421,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     rows.map(r => r.date?.slice(0,7)).filter(Boolean)
   )).sort().reverse()];
 
-  // Unique statuses: admin (гүйцэтгэгчийн төлөв) + txStatus (гүйлгээний төлөв)
-  const allStatuses = Array.from(new Set([
-    ...rows.map(r=>r.admin).filter(Boolean),
-    ...rows.map(r=>r.txStatus).filter(Boolean)
-  ]));
-  const statuses = ["Бүгд", ...allStatuses];
+  const statuses = ["Бүгд", "Амжилттай", "Хүлээгдэж буй", "Хүлээгдэж байгаа", "Цуцласан"];
 
   // Filter
   const q = search.toLowerCase();
@@ -473,10 +535,15 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
           {statuses.map(s=><option key={s}>{s}</option>)}
         </select>
-        <select value={month} onChange={e=>{setMonth(e.target.value);setPage(0);}}
-          style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
-          {months.map(m=><option key={m}>{m}</option>)}
-        </select>
+        <input type="date" value={month==="Бүгд"?"":month+"-01"} 
+          onChange={e=>{
+            const v=e.target.value;
+            setMonth(v?v.slice(0,7):"Бүгд");
+            setPage(0);
+          }}
+          style={{padding:"9px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer",color:month==="Бүгд"?"#94a3b8":"#0f172a"}}/>
+        <button onClick={()=>{setMonth("Бүгд");setPage(0);}} 
+          style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"12px",fontFamily:"inherit",background:month==="Бүгд"?"#1a56db":"#fff",color:month==="Бүгд"?"#fff":"#64748b",cursor:"pointer",fontWeight:700}}>Бүгд</button>
         <div style={{padding:"10px 14px",borderRadius:"10px",background:"#f1f5f9",fontSize:"12px",color:"#64748b",fontWeight:700,whiteSpace:"nowrap"}}>
           {filtered.length} гүйлгээ
         </div>
@@ -488,12 +555,11 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
 
       {/* ── SUMMARY CARDS ── */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"12px",marginBottom:"20px"}}>
-        <StatCard label="Нийт зарлага"    value={fmtMNT(totAmount)}    sub={`${conf.length} баталгаажсан`}           color="#1a56db" icon="💰"/>
-        <StatCard label="Ашиг (₮)"        value={fmtMNT(totProfMNT)}   sub={fmtUSD(totProfUSD)+" доллар"}              color={totProfMNT>=0?"#0e9f6e":"#ef4444"} icon="📈"/>
-        <StatCard label="Ашиг ($)"        value={fmtUSD(totProfUSD)}   sub={`Нийт ${filtered.length} гүйлгээ`}         color="#7e3af2" icon="💵"/>
-        <StatCard label="Амжилттай"        value={success.length+" ш"}  sub={fmtMNT(success.reduce((s,r)=>s+(r.amount||0),0))} color="#0e9f6e" icon="✅"/>
-        <StatCard label="Хүлээгдэж буй"   value={waiting.length+" ш"}  sub={fmtMNT(waiting.reduce((s,r)=>s+(r.amount||0),0))} color="#f59e0b" icon="⏳"/>
-        <StatCard label="Цуцласан"         value={cancelled.length+" ш"} sub={fmtMNT(totCancelled)}                    color="#ef4444" icon="❌"/>
+        <StatCard label="Нийт үнийн дүн"  value={fmtMNT(totTotal)}     sub={`${conf.length} гүйлгээ`}                color="#1a56db" icon="💰"/>
+        <StatCard label="Ашиг"            value={fmtMNT(totProfMNT)}   sub={fmtUSD(totProfUSD)}                        color={totProfMNT>=0?"#0e9f6e":"#ef4444"} icon="📈"/>
+        <StatCard label="Амжилттай"        value={success.length}  sub={fmtMNT(success.reduce((s,r)=>s+(r.amount||0),0))} color="#0e9f6e" icon="✅"/>
+        <StatCard label="Хүлээгдэж буй"   value={waiting.length}  sub={fmtMNT(waiting.reduce((s,r)=>s+(r.amount||0),0))} color="#f59e0b" icon="⏳"/>
+        <StatCard label="Цуцласан"         value={cancelled.length} sub={fmtMNT(totCancelled)}                    color="#ef4444" icon="❌"/>
       </div>
 
       {/* ── CHARTS ROW ── */}
@@ -513,21 +579,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
               ))}
             </div>
           </div>
-          <div style={{overflowX:"auto"}}>
-            <div style={{display:"flex",gap:"4px",alignItems:"flex-end",minWidth:`${graphData.length*40}px`,height:"120px",padding:"0 4px"}}>
-              {graphData.map(([k,v])=>{
-                const h = Math.max((Math.abs(v.profitMNT)/maxProfit)*100, 2);
-                const pos = v.profitMNT >= 0;
-                return (
-                  <div key={k} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",minWidth:"30px"}}>
-                    <div style={{fontSize:"9px",color:pos?"#0e9f6e":"#ef4444",fontWeight:700}}>{fmtMNT(v.profitMNT)}</div>
-                    <div style={{width:"100%",height:`${h}%`,background:pos?"linear-gradient(180deg,#0e9f6e,#6ee7b7)":"linear-gradient(180deg,#ef4444,#fca5a5)",borderRadius:"4px 4px 0 0",minHeight:"4px"}}/>
-                    <div style={{fontSize:"8px",color:"#94a3b8",textAlign:"center",transform:"rotate(-40deg)",transformOrigin:"center",whiteSpace:"nowrap",marginTop:"4px"}}>{k.slice(5)}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <LineChart data={graphData} maxProfit={maxProfit}/>
         </div>
 
         {/* TOP CATEGORIES */}
