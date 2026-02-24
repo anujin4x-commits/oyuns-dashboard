@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
 const ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
@@ -34,7 +33,7 @@ function fmt(n, cur) {
 // Google Sheets API — Apps Script Web App URL
 // Доорх URL-г өөрийнхөөрөө солино уу
 // ═══════════════════════════════════════════════════════
-const SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
 
 async function apiGet(params) {
   const url = SCRIPT_URL + "?" + new URLSearchParams(params);
