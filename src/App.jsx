@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-const API_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzq7ipWWDntJHeX2yh61mPGEq4CFCQ0AqFkAAgO9C2kOWTOYCVCZ9bLyIqTV4XD_pp9/exec";
 const ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
@@ -30,6 +30,25 @@ function fmt(n, cur) {
   return (n < 0 ? "-" : "") + s + " " + (cur === "USDT" ? "USDT" : CUR_SYM[cur]);
 }
 
+// ═══════════════════════════════════════════════════════
+// Google Sheets API — Apps Script Web App URL
+// Доорх URL-г өөрийнхөөрөө солино уу
+// ═══════════════════════════════════════════════════════
+const SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE";
+
+async function apiGet(params) {
+  const url = SCRIPT_URL + "?" + new URLSearchParams(params);
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function apiPost(body) {
+  const res = await fetch(SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
 
 const inp = {
   width:"100%", padding:"10px 12px", borderRadius:"10px", border:"1.5px solid #e2e8f0",
@@ -197,7 +216,7 @@ function AddTxModal({ acc, onClose, onSave }) {
         <input style={inp} value={cp} onChange={e => setCp(e.target.value)} placeholder="Компани / хүний нэр" />
       </Field>
 
-      {/* 4. Үнийн дүн */}
+      {/* 4. Дүн */}
       <Field label={`Дүн (${acc.currency})`}>
         <input style={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
       </Field>
@@ -415,68 +434,48 @@ export default function App() {
   const [editBalFor, setEditBalFor] = useState(null);
   const [showDebt, setShowDebt]     = useState(false);
 
-useEffect(() => {
-  async function loadFromSheet() {
-    try {
-      const res = await fetch(API_URL);
-      const data = await res.json();
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiGet({ action: "getAll" });
+        if (data.ok) {
+          setBalances(data.balances || DEFAULT_BAL);
+          setTx(data.transactions || []);
+          setDebts(data.debts || []);
+        }
+      } catch (e) {
+        console.error("Sheets load error:", e);
+      }
+      setLoading(false);
+    })();
+  }, []);
 
-      // Sheet row format:
-      // [accountId, type, amount, date, counterparty, note]
-      const formatted = data.map((row, index) => ({
-        id: index.toString(),
-        accountId: row[0],
-        type: row[1],
-        amount: Number(row[2]),
-        date: row[3],
-        counterparty: row[4],
-        note: row[5],
-      }));
+  // Google Sheets-т шууд бичнэ — local state-г optimistic update хийнэ
 
-      setTx(formatted);
-
-      // Balance дахин тооцоолох
-      const newBalances = { ...DEFAULT_BAL };
-
-      formatted.forEach(tx => {
-        newBalances[tx.accountId] =
-          (newBalances[tx.accountId] || 0) +
-          (tx.type === "Орлого" ? tx.amount : -tx.amount);
-      });
-
-      setBalances(newBalances);
-
-    } catch (err) {
-      console.error("Sheet load error:", err);
-    }
-
-    setLoading(false);
+  async function handleSaveTx(tx) {
+    // Optimistic update
+    setTx(prev => [...prev, tx]);
+    const nb = { ...balances };
+    nb[tx.accountId] = (nb[tx.accountId] || 0) + (tx.type === "Орлого" ? tx.amount : -tx.amount);
+    setBalances(nb);
+    // Save to Sheets
+    const res = await apiPost({ action: "addTransaction", data: tx });
+    if (res.ok && res.balances) setBalances(res.balances);
   }
 
-  loadFromSheet();
-}, []);
+  async function handleDeleteTx(id) {
+    const tx = transactions.find(t => t.id === id);
+    if (!tx) return;
+    // Optimistic update
+    setTx(prev => prev.filter(t => t.id !== id));
+    const nb = { ...balances };
+    nb[tx.accountId] = (nb[tx.accountId] || 0) + (tx.type === "Орлого" ? -tx.amount : tx.amount);
+    setBalances(nb);
+    // Delete from Sheets
+    const res = await apiPost({ action: "deleteTransaction", id, tx });
+    if (res.ok && res.balances) setBalances(res.balances);
+  }
 
-async function handleSaveTx(tx) {
-  // 1. Google Sheet рүү хадгалах
-  await fetch(API_URL, {
-  method: "POST",
-  body: new URLSearchParams({
-    mode: "transaction",
-    data: JSON.stringify(tx)
-  })
-});
-
-  // 2. Local state update (UI immediate update)
-  const updated = [...transactions, tx];
-  setTx(updated);
-
-  const nb = { ...balances };
-  nb[tx.accountId] =
-    (nb[tx.accountId] || 0) +
-    (tx.type === "Орлого" ? tx.amount : -tx.amount);
-
-  setBalances(nb);
-}
   const addTxAcc   = ACCOUNTS.find(a => a.id === addTxFor);
   const viewTxAcc  = ACCOUNTS.find(a => a.id === viewTxFor);
   const editBalAcc = ACCOUNTS.find(a => a.id === editBalFor);
@@ -540,16 +539,30 @@ async function handleSaveTx(tx) {
           <DebtSection
             debts={debts}
             onAdd={() => setShowDebt(true)}
-            onToggle={async id => await saveDb(debts.map(d => d.id === id ? { ...d, status: d.status === "Хүлээгдэж буй" ? "Төлөгдсөн" : "Хүлээгдэж буй" } : d))}
-            onDelete={async id => await saveDb(debts.filter(d => d.id !== id))}
+            onToggle={async id => {
+              const updated = debts.map(d => d.id === id ? { ...d, status: d.status === "Хүлээгдэж буй" ? "Төлөгдсөн" : "Хүлээгдэж буй" } : d);
+              setDebts(updated);
+              const debt = updated.find(d => d.id === id);
+              await apiPost({ action: "updateDebt", data: debt });
+            }}
+            onDelete={async id => {
+              setDebts(prev => prev.filter(d => d.id !== id));
+              await apiPost({ action: "deleteDebt", id });
+            }}
           />
         )}
       </div>
 
       {addTxFor  && addTxAcc   && <AddTxModal    acc={addTxAcc}   onClose={() => setAddTxFor(null)}  onSave={handleSaveTx} />}
       {viewTxFor && viewTxAcc  && <TxHistoryModal acc={viewTxAcc}  transactions={transactions} onClose={() => setViewTxFor(null)}  onDelete={handleDeleteTx} />}
-      {editBalFor&& editBalAcc && <EditBalModal   acc={editBalAcc} bal={balances[editBalFor] || 0}    onClose={() => setEditBalFor(null)} onSave={async (id, v) => await saveBal({ ...balances, [id]:v })} />}
-      {showDebt  && <AddDebtModal onClose={() => setShowDebt(false)} onSave={async d => await saveDb([...debts, d])} />}
+      {editBalFor&& editBalAcc && <EditBalModal   acc={editBalAcc} bal={balances[editBalFor] || 0}    onClose={() => setEditBalFor(null)} onSave={async (id, v) => {
+        setBalances(prev => ({ ...prev, [id]: v }));
+        await apiPost({ action: "setBalance", accountId: id, value: v });
+      }} />}
+      {showDebt  && <AddDebtModal onClose={() => setShowDebt(false)} onSave={async d => {
+        setDebts(prev => [...prev, d]);
+        await apiPost({ action: "addDebt", data: d });
+      }} />}
     </div>
   );
 }
