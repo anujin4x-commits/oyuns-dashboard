@@ -459,10 +459,12 @@ useEffect(() => {
 async function handleSaveTx(tx) {
   // 1. Google Sheet рүү хадгалах
   await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(tx)
-  });
+  method: "POST",
+  body: new URLSearchParams({
+    mode: "transaction",
+    data: JSON.stringify(tx)
+  })
+});
 
   // 2. Local state update (UI immediate update)
   const updated = [...transactions, tx];
