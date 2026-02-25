@@ -11,6 +11,12 @@ function useWindowWidth() {
   return w;
 }
 
+// ── Хэрэглэгчид + PIN (AppScript-д ч хадгална) ──
+const USERS = [
+  { id: "oyuns",    name: "Оюун",   username: "oyuns",    pin: "oyun$",  color: "#1a56db" },
+  { id: "anujin4x", name: "Анужин", username: "anujin4x", pin: "oyunx",  color: "#0e9f6e" },
+];
+
 const DEFAULT_ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
@@ -203,6 +209,7 @@ function TxHistoryModal({ acc, transactions, onClose, onDelete }) {
                     <div style={{fontSize:"12px",color:"#475569"}}>{tx.date}{tx.counterparty?` · ${tx.counterparty}`:""}</div>
                     {tx.rate && <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"2px"}}>Ханш: {tx.rate}</div>}
                     {tx.note && <div style={{fontSize:"12px",color:"#64748b",marginTop:"2px",fontStyle:"italic"}}>{tx.note}</div>}
+                    {tx.createdBy && <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"3px"}}>👤 {tx.createdBy}</div>}
                   </div>
                   <button onClick={()=>onDelete(tx.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:"16px",padding:"0 4px"}}>🗑</button>
                 </div>
@@ -1359,6 +1366,82 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   );
 }
 
+// ════════════════════════════════
+// LOGIN SCREEN
+// ════════════════════════════════
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [pin, setPin]           = useState("");
+  const [error, setError]       = useState("");
+  const [showPin, setShowPin]   = useState(false);
+  const inpStyle = {
+    width:"100%", padding:"14px 16px", borderRadius:"12px",
+    border:"1.5px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.08)",
+    fontSize:"15px", color:"#fff", fontFamily:"inherit", outline:"none",
+    boxSizing:"border-box", letterSpacing:"0.05em",
+  };
+
+  function tryLogin(e) {
+    e && e.preventDefault();
+    const u = USERS.find(x => x.username === username.trim() && x.pin === pin);
+    if (u) {
+      onLogin(u);
+    } else {
+      setError("Нэвтрэх нэр эсвэл PIN буруу байна");
+      setPin("");
+    }
+  }
+
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%)",fontFamily:"'Montserrat',sans-serif",padding:"20px"}}>
+      <div style={{width:"100%",maxWidth:"340px"}}>
+        <div style={{textAlign:"center",marginBottom:"40px"}}>
+          <div style={{fontSize:"30px",fontWeight:900,color:"#fff",letterSpacing:"0.08em"}}>OYUNS</div>
+          <div style={{fontSize:"11px",color:"#93c5fd",fontWeight:600,letterSpacing:"0.15em",marginTop:"6px"}}>САНХҮҮГИЙН БҮРТГЭЛ</div>
+        </div>
+
+        <form onSubmit={tryLogin} style={{display:"flex",flexDirection:"column",gap:"14px"}}>
+          <div>
+            <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"7px"}}>Нэвтрэх нэр</div>
+            <input
+              style={inpStyle}
+              value={username}
+              onChange={e=>{setUsername(e.target.value);setError("");}}
+              placeholder="username"
+              autoComplete="username"
+              autoCapitalize="none"
+            />
+          </div>
+          <div>
+            <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"7px"}}>PIN код</div>
+            <div style={{position:"relative"}}>
+              <input
+                style={{...inpStyle, paddingRight:"46px", letterSpacing: showPin?"0.05em":"0.2em"}}
+                type={showPin?"text":"password"}
+                value={pin}
+                onChange={e=>{setPin(e.target.value);setError("");}}
+                placeholder="••••••"
+                autoComplete="current-password"
+              />
+              <button type="button" onClick={()=>setShowPin(s=>!s)}
+                style={{position:"absolute",right:"14px",top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:"16px",padding:0}}>
+                {showPin?"🙈":"👁"}
+              </button>
+            </div>
+          </div>
+
+          {error && <div style={{color:"#fca5a5",fontSize:"12px",fontWeight:600,textAlign:"center",padding:"8px",background:"rgba(239,68,68,0.1)",borderRadius:"8px"}}>{error}</div>}
+
+          <button type="submit"
+            style={{padding:"15px",background: username&&pin?"#1a56db":"rgba(255,255,255,0.1)",border:"none",borderRadius:"12px",cursor:username&&pin?"pointer":"default",fontSize:"15px",fontWeight:800,color:"#fff",fontFamily:"inherit",marginTop:"4px",transition:"background 0.2s"}}>
+            Нэвтрэх
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     const link = document.createElement('link');
@@ -1368,6 +1451,13 @@ export default function App() {
   }, []);
 
   const winW = useWindowWidth();
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const s = sessionStorage.getItem("oyuns_user");
+      if (s) return JSON.parse(s);
+    } catch(e) {}
+    return null;
+  });
   const [tab, setTab]           = useState("dashboard");
   const [accounts, setAccounts] = useState(() => {
     try { const s=localStorage.getItem("oyuns_accounts"); if(s) return JSON.parse(s); } catch(e){}
@@ -1456,9 +1546,12 @@ export default function App() {
     loadFinance();
   }, [tab]);
   async function handleSaveTx(tx) {
-    // accountName: accounts-аас нэр олж нэм
     const acc = accounts.find(a=>a.id===tx.accountId);
-    const txWithName = {...tx, accountName: acc ? acc.name : tx.accountId};
+    const txWithName = {
+      ...tx,
+      accountName: acc ? acc.name : tx.accountId,
+      createdBy: currentUser?.name || "",
+    };
     setTx(prev=>[...prev,txWithName]);
     const nb={...balances};
     nb[tx.accountId]=(nb[tx.accountId]||0)+(tx.type==="Орлого"?tx.amount:-tx.amount);
@@ -1482,17 +1575,37 @@ export default function App() {
     {currency:"USDT",accs:accounts.filter(a=>a.currency==="USDT")},
   ];
 
+  // Нэвтрээгүй бол LoginScreen харуулна
+  if (!currentUser) return (
+    <LoginScreen onLogin={user => {
+      sessionStorage.setItem("oyuns_user", JSON.stringify(user));
+      setCurrentUser(user);
+    }}/>
+  );
+
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
       <div style={{background:"linear-gradient(135deg,#0f172a 0%,#1a56db 100%)",padding:"14px 18px 0",position:"sticky",top:0,zIndex:100,boxShadow:"0 4px 20px rgba(0,0,0,0.15)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:"12px"}}>
-          <div>
-            <div style={{fontSize:"16px",fontWeight:900,color:"#fff",letterSpacing:"0.05em",lineHeight:1}}>OYUNS FINANCE</div>
-            <div style={{fontSize:"10px",fontWeight:600,color:"#93c5fd",letterSpacing:"0.12em",marginTop:"2px"}}>САНХҮҮГИЙН БҮРТГЭЛ</div>
+          <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+            <div>
+              <div style={{fontSize:"16px",fontWeight:900,color:"#fff",letterSpacing:"0.05em",lineHeight:1}}>OYUNS FINANCE</div>
+              <div style={{fontSize:"10px",fontWeight:600,color:"#93c5fd",letterSpacing:"0.12em",marginTop:"2px"}}>САНХҮҮГИЙН БҮРТГЭЛ</div>
+            </div>
           </div>
-          <LiveClock/>
+          <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:"11px",fontWeight:700,color:"rgba(255,255,255,0.6)"}}>Нэвтэрсэн</div>
+              <div style={{fontSize:"13px",fontWeight:800,color:"#fff",display:"flex",alignItems:"center",gap:"6px"}}><span style={{width:"22px",height:"22px",borderRadius:"50%",background:currentUser.color,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:900,color:"#fff"}}>{currentUser.name[0]}</span>{currentUser.name}</div>
+            </div>
+            <button onClick={()=>{sessionStorage.removeItem("oyuns_user");setCurrentUser(null);}}
+              style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"8px",padding:"6px 10px",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:"11px",fontWeight:700,fontFamily:"inherit"}}>
+              Гарах
+            </button>
+            <LiveClock/>
+          </div>
         </div>
         <div style={{display:"flex",gap:"2px",background:"rgba(255,255,255,0.12)",borderRadius:"10px",padding:"3px"}}>
           {[["dashboard","💼 Данс"],["debts","📊 Авлага/Зээл"],["finance","📈 Гүйлгээ"]].map(([key,label])=>(
@@ -1578,10 +1691,12 @@ export default function App() {
         const diff = newVal - oldVal;
         if (diff !== 0) {
           const balAcc = accounts.find(a=>a.id===id);
+          const createdBy = currentUser?.name || "";
           const tx = {
             id: Date.now().toString(),
             accountId: id,
             accountName: balAcc ? balAcc.name : id,
+            createdBy,
             type: diff > 0 ? "Орлого" : "Зарлага",
             amount: Math.abs(diff),
             date: new Date().toISOString().slice(0,10),
