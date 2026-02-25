@@ -20,8 +20,8 @@ const DEFAULT_ACCOUNTS = [
 ];
 const CUR_COLORS = ["#1a56db","#0e9f6e","#f59e0b","#7e3af2","#06b6d4","#ef4444","#ec4899","#84cc16"];
 const CUR_FLAG  = { MNT:"🇲🇳", RUB:"🇷🇺", USDT:"💵" };
-const CUR_LABEL = { MNT:"Төгрөгийн данс", RUB:"Рублийн данс", USDT:"USDT данс" };
-const CUR_SYM   = { MNT:"₮", RUB:"₽", USDT:"USDT" };
+const CUR_LABEL = { MNT:"Төгрөгийн данс", RUB:"Рублийн данс", USDT:"USDT ($) данс" };
+const CUR_SYM   = { MNT:"₮", RUB:"₽", USDT:"$" };
 const DEFAULT_BAL = Object.fromEntries(DEFAULT_ACCOUNTS.map(a => [a.id, 0]));
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -38,7 +38,7 @@ function fmt(n, cur) {
   if (n === null || n === undefined || isNaN(n)) return "—";
   const abs = Math.abs(n);
   const s = abs.toLocaleString("mn-MN", { minimumFractionDigits:2, maximumFractionDigits:2 });
-  return (n < 0 ? "-" : "") + s + " " + (cur === "USDT" ? "USDT" : CUR_SYM[cur]);
+  return (n < 0 ? "-" : "") + s + " " + CUR_SYM[cur] || "$";
 }
 
 // ════════════════════════════════════════════════════
@@ -248,7 +248,7 @@ function AddAccountModal({ onClose, onSave }) {
           <div style={{display:"flex",gap:"8px"}}>
             {["MNT","RUB","USDT"].map(c=>(
               <button key={c} onClick={()=>setCur(c)} style={{flex:1,padding:"10px",border:`2px solid ${cur===c?"#1a56db":"#e2e8f0"}`,borderRadius:"10px",background:cur===c?"#dbeafe":"#f8fafc",color:cur===c?"#1e40af":"#64748b",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                {c==="MNT"?"₮ MNT":c==="RUB"?"₽ RUB":"💵 USDT"}
+                {c==="MNT"?"₮ MNT":c==="RUB"?"₽ RUB":"$ USDT"}
               </button>
             ))}
           </div>
@@ -343,7 +343,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
 
   // Валютаар нийт авлага / зээл тооцоо (зөвхөн хүлээгдэж буй)
   const CURRENCIES = ["MNT","RUB","USD"];
-  const CUR_SYM2 = { MNT:"₮", RUB:"₽", USD:"$" };
+  const CUR_SYM2 = { MNT:"₮", RUB:"₽", USD:"$", USDT:"$" };
   function sumByCur(type) {
     const res = {};
     pending.filter(d=>d.debtType===type).forEach(d=>{
@@ -400,7 +400,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#93c5fd",marginTop:"10px",borderTop:"1px solid #dbeafe",paddingTop:"8px"}}>
-            {pending.filter(d=>d.debtType==="Авлага").length} хүлээгдэж буй
+            {pending.filter(d=>d.debtType==="Авлага").length} хүлээгдэж буй гүйлгээ
           </div>
         </div>
 
@@ -419,12 +419,12 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#fcd34d",marginTop:"10px",borderTop:"1px solid #fde68a",paddingTop:"8px"}}>
-            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй
+            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй гүйлгээ
           </div>
         </div>
       </div>
       {debts.length===0
-        ? <div style={{textAlign:"center",padding:"32px",color:"#94a3b8",background:"#f8fafc",borderRadius:"12px",fontSize:"14px"}}>Бүртгэл байхгүй байна</div>
+        ? <div style={{textAlign:"center",padding:"32px",color:"#94a3b8",background:"#f8fafc",borderRadius:"12px",fontSize:"14px"}}>Гүйлгээ байхгүй байна</div>
         : <>
             {pending.length>0 && <div style={{marginBottom:"16px"}}><div style={{fontSize:"11px",fontWeight:700,color:"#94a3b8",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Хүлээгдэж буй ({pending.length})</div><div style={{display:"flex",flexDirection:"column",gap:"8px"}}>{pending.map(d=><Card key={d.id} d={d}/>)}</div></div>}
             {paid.length>0 && <div style={{opacity:0.65}}><div style={{fontSize:"11px",fontWeight:700,color:"#94a3b8",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Төлөгдсөн ({paid.length})</div><div style={{display:"flex",flexDirection:"column",gap:"8px"}}>{paid.map(d=><Card key={d.id} d={d}/>)}</div></div>}
@@ -1093,7 +1093,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           </div>
           {/* Гараг — Ангилалын доор, flex:1-ээр үлдсэн зайг дүүргэнэ */}
           <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px",marginTop:"14px",flex:1,display:"flex",flexDirection:"column"}}>
-            <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"10px"}}>📆 Өдөр</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"10px"}}>📆 Гарагаар</div>
             <div style={{display:"flex",gap:"4px",alignItems:"flex-end",flex:1,minHeight:"60px"}}>
               {Object.entries(dowMap).map(([dow,v])=>{
                 const maxDow = Math.max(...Object.values(dowMap).map(d=>d.profit),1);
@@ -1482,14 +1482,15 @@ export default function App() {
           {/* ── НИЙТ НИЙЛБЭР ── */}
           <div style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"16px",padding:"16px 18px",marginBottom:"20px",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
             <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"12px"}}>💰 Нийт үлдэгдэл</div>
-            <div style={{display:"flex",gap:"16px",flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:"20px",flexWrap:"nowrap",overflowX:"auto"}}>
               {["MNT","RUB","USDT"].map(cur=>{
                 const total = accounts.filter(a=>a.currency===cur).reduce((s,a)=>s+(balances[a.id]||0),0);
                 if(accounts.filter(a=>a.currency===cur).length===0) return null;
+                const sym = cur==="MNT"?"₮":cur==="RUB"?"₽":"$";
                 return (
-                  <div key={cur} style={{flex:"1 1 100px"}}>
-                    <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",marginBottom:"3px"}}>{CUR_FLAG[cur]} {cur}</div>
-                    <div style={{fontWeight:900,fontSize:"22px",color:total>=0?"#fff":"#fca5a5",lineHeight:1}}>{fmt(total,cur)}</div>
+                  <div key={cur} style={{flexShrink:0}}>
+                    <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.5)",marginBottom:"3px",whiteSpace:"nowrap"}}>{CUR_FLAG[cur]} {cur}</div>
+                    <div style={{fontWeight:900,fontSize:"20px",color:total>=0?"#fff":"#fca5a5",lineHeight:1,whiteSpace:"nowrap"}}>{total<0?"-":""}{sym}{Math.abs(total).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
                   </div>
                 );
               })}
