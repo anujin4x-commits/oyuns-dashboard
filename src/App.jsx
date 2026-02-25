@@ -757,7 +757,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     <div style={{paddingBottom:"50px"}}>
 
       {/* ── FILTERS ── */}
-      {/* ── ТОВЧ СТАТИСТИК ── */}
+      {/* ── Товч СТАТИСТИК ── */}
       {(()=>{
         const succ = rows.filter(r=>r.txStatus==="Амжилттай");
         const tz8 = new Date(Date.now() + (new Date().getTimezoneOffset()+8*60)*60000);
