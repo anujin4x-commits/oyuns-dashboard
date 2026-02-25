@@ -730,7 +730,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     </th>;
   }
 
-  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачаалж байна...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачааллаж байна...</div>;
   if (!rows.length) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл олдсонгүй</div>;
 
   const pageRows = sorted.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -840,7 +840,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         </div>
         <button onClick={()=>onRefresh(true)} disabled={loading}
           style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s",display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}>
-          <span>{loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}</span>
+          <span>{loading?"⏳ Ачааллаж...":"🔄 Шинэчлэх"}</span>
           {lastLoaded && !loading && <span style={{fontSize:"9px",opacity:0.7}}>{String(lastLoaded.getHours()).padStart(2,"0")}:{String(lastLoaded.getMinutes()).padStart(2,"0")}</span>}
         </button>
       </div>
@@ -947,7 +947,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
 
         {/* ИДЭВХТЭЙ ЦАГ */}
         <div style={cardStyle}>
-          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Идэвхтэй цаг</div>
+          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Өндөр ашигтай үе</div>
           <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
             {/* Хамгийн сайн өдөр */}
             {bestDay && (
@@ -983,7 +983,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
               </div>
               {bestDow && <div style={{fontSize:"10px",color:"#64748b",marginTop:"4px"}}>
                 Идэвхтэй: <span style={{fontWeight:700,color:"#1a56db"}}>{dowLabels[bestDow[0]]}</span>
-                {worstDow && <> · Тайван: <span style={{fontWeight:700,color:"#94a3b8"}}>{dowLabels[worstDow[0]]}</span></>}
+                {worstDow && <> · Идэвхгүй: <span style={{fontWeight:700,color:"#94a3b8"}}>{dowLabels[worstDow[0]]}</span></>}
               </div>}
             </div>
           </div>
@@ -1295,7 +1295,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
