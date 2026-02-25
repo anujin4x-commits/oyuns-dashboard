@@ -34,15 +34,31 @@ function fmt(n, cur) {
 // ════════════════════════════════════════════════════
 const SCRIPT_URL = "https://oyuns-dashboard.anujin4x.workers.dev";
 
-async function apiGet(params) {
+const CACHE_TTL = 5 * 60 * 1000; // 5 минут
+
+async function apiGet(params, forceRefresh=false) {
+  const key = "oyuns_" + new URLSearchParams(params).toString();
+  // Кэш шалгах
+  if (!forceRefresh) {
+    try {
+      const c = localStorage.getItem(key);
+      if (c) {
+        const { ts, data } = JSON.parse(c);
+        if (Date.now() - ts < CACHE_TTL) return data;
+      }
+    } catch(e) {}
+  }
+  // Шинэ fetch
   const url = SCRIPT_URL + "?" + new URLSearchParams(params);
-  // redirect: "follow" нь Google-н redirect-г дагана
-  // credentials: "omit" нь CORS preflight-г зайлуулна
-  const res = await fetch(url, {
-    redirect: "follow",
-    credentials: "omit",
-  });
-  return res.json();
+  const res = await fetch(url, { redirect: "follow", credentials: "omit" });
+  const data = await res.json();
+  // Хадгалах
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+  return data;
+}
+
+function clearApiCache() {
+  Object.keys(localStorage).filter(k => k.startsWith("oyuns_")).forEach(k => localStorage.removeItem(k));
 }
 
 async function apiPost(body) {
@@ -457,7 +473,7 @@ function MiniBar({value, max, color}) {
   );
 }
 
-function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth, period, setPeriod, onRefresh }) {
+function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth, period, setPeriod, onRefresh, lastLoaded }) {
   const [sortCol, setSortCol] = useState("date");
   const [sortDir, setSortDir] = useState(-1);
   const [page, setPage] = useState(0);
@@ -695,7 +711,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       {/* ── FILTERS ── */}
       <div style={{display:"flex",gap:"8px",marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}}>
         <input value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}
-          placeholder="🔍 Харилцагч, тайлбар, invoice..."
+          placeholder="🔍 Харилцагч / Invoice / Тайлбар..."
           style={{flex:"1",minWidth:"180px",padding:"10px 14px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",outline:"none",background:"#fff"}}/>
         <select value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}
           style={{padding:"10px 12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"13px",fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
@@ -791,9 +807,10 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         <div style={{padding:"10px 14px",borderRadius:"10px",background:"#f1f5f9",fontSize:"12px",color:"#64748b",fontWeight:700,whiteSpace:"nowrap"}}>
           {filtered.length} гүйлгээ
         </div>
-        <button onClick={onRefresh} disabled={loading}
-          style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s"}}>
-          {loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}
+        <button onClick={()=>onRefresh(true)} disabled={loading}
+          style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s",display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}>
+          <span>{loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}</span>
+          {lastLoaded && !loading && <span style={{fontSize:"9px",opacity:0.7}}>{String(lastLoaded.getHours()).padStart(2,"0")}:{String(lastLoaded.getMinutes()).padStart(2,"0")}</span>}
         </button>
       </div>
 
@@ -1031,20 +1048,19 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
             <thead>
               <tr style={{background:"#f8fafc"}}>
-                <SortTh col="no"           label="№"/>
                 <SortTh col="date"         label="Огноо"/>
-                <SortTh col="counterparty" label="Харилцагч"/>
+                <SortTh col="counterparty" label="Хэрэглэгч"/>
                 <SortTh col="description"  label="Тайлбар"/>
-                <SortTh col="amount"       label="Зарлага"/>
-                <SortTh col="rateOrtog"    label="Өртөг ₮/$"/>
-                <SortTh col="rateZarakh"   label="Зарах ₮/$"/>
-                <SortTh col="profitMNT"    label="Ашиг ₮"/>
-                <SortTh col="profitUSD"    label="Ашиг $"/>
-                <SortTh col="totalPrice"   label="Нийт үнэ"/>
-                <SortTh col="received"     label="Авсан үнэ"/>
+                <SortTh col="amount"       label="Зарлагын дүн"/>
+                <SortTh col="rateOrtog"    label="Өртөг ханш"/>
+                <SortTh col="rateZarakh"   label="Зарах ханш"/>
+                <SortTh col="profitMNT"    label="Ашиг /төгрөг/"/>
+                <SortTh col="profitUSD"    label="Ашиг /доллар/"/>
+                <SortTh col="totalPrice"   label="Нийт үнийн дүн"/>
+                <SortTh col="received"     label="Хүлээж авсан үнийн дүн"/>
                 <SortTh col="difference"   label="Зөрүү"/>
                 <SortTh col="category"     label="Ангилал"/>
-                <SortTh col="status"       label="Төлөв"/>
+                <SortTh col="txStatus"     label="Төлөв"/>
               </tr>
             </thead>
             <tbody>
@@ -1053,7 +1069,6 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
                 const statusText  = r.status==="Баталгаажсан"||r.status==="Хяналтанд"?"#065f46":r.status==="Цуцлагдсан"?"#991b1b":"#92400e";
                 return (
                   <tr key={i} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafa"}}>
-                    <td style={{padding:"7px 8px",color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>{r.no}</td>
                     <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{r.date}</td>
                     <td style={{padding:"7px 8px",fontWeight:700,color:"#0f172a",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.counterparty}>{r.counterparty}</td>
                     <td style={{padding:"7px 8px",color:"#475569",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.description}>{r.description}</td>
@@ -1067,10 +1082,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
                     <td style={{padding:"7px 8px",fontWeight:600,color:r.difference<0?"#ef4444":r.difference>0?"#0e9f6e":"#94a3b8",whiteSpace:"nowrap",textAlign:"right"}}>{fmtMNTFull(r.difference)}</td>
                     <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{r.category}</td>
                     <td style={{padding:"7px 8px"}}>
-                      <div style={{display:"flex",flexDirection:"column",gap:"2px"}}>
-                        <span style={{fontSize:"10px",fontWeight:700,padding:"2px 6px",borderRadius:"5px",background:r.admin==="Баталгаажсан"?"#d1fae5":r.admin==="Хяналтанд"?"#dbeafe":r.admin==="Цуцласан"?"#fee2e2":"#f1f5f9",color:r.admin==="Баталгаажсан"?"#065f46":r.admin==="Хяналтанд"?"#1e40af":r.admin==="Цуцласан"?"#991b1b":"#64748b",whiteSpace:"nowrap"}}>{r.admin||"—"}</span>
-                        <span style={{fontSize:"10px",fontWeight:600,padding:"2px 6px",borderRadius:"5px",background:r.txStatus==="Амжилттай"?"#d1fae5":r.txStatus?.includes("Хүлээгдэж")?"#fef3c7":r.txStatus==="Цуцласан"?"#fee2e2":"#f1f5f9",color:r.txStatus==="Амжилттай"?"#065f46":r.txStatus?.includes("Хүлээгдэж")?"#92400e":r.txStatus==="Цуцласан"?"#991b1b":"#64748b",whiteSpace:"nowrap"}}>{r.txStatus||"—"}</span>
-                      </div>
+                      <span style={{fontSize:"10px",fontWeight:600,padding:"2px 8px",borderRadius:"5px",background:r.txStatus==="Амжилттай"?"#d1fae5":r.txStatus?.includes("Хүлээгдэж")?"#fef3c7":r.txStatus==="Цуцласан"?"#fee2e2":"#f1f5f9",color:r.txStatus==="Амжилттай"?"#065f46":r.txStatus?.includes("Хүлээгдэж")?"#92400e":r.txStatus==="Цуцласан"?"#991b1b":"#64748b",whiteSpace:"nowrap"}}>{r.txStatus||"—"}</span>
                     </td>
                   </tr>
                 );
@@ -1130,7 +1142,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiGet({ action:"getAll" });
+        const data = await apiGet({ action:"getAll" }, false);
         if (data.ok) {
           setBalances(data.balances || DEFAULT_BAL);
           setTx(data.transactions || []);
@@ -1145,11 +1157,17 @@ export default function App() {
   }, []);
 
 
-  const loadFinance = async () => {
+  const [lastLoaded, setLastLoaded] = useState(null);
+
+  const loadFinance = async (force=false) => {
+    if (force) clearApiCache();
     setFinanceLoading(true);
     try {
-      const data = await apiGet({ action:"getFinance" });
-      if (data.ok) setFinanceRows(data.rows || []);
+      const data = await apiGet({ action:"getFinance" }, force);
+      if (data.ok) {
+        setFinanceRows(data.rows || []);
+        setLastLoaded(new Date());
+      }
     } catch(e) { console.error("Finance load error:", e); }
     setFinanceLoading(false);
   };
@@ -1217,7 +1235,7 @@ export default function App() {
         ))}
 
 
-        {tab==="finance" && <FinanceDashboard rows={financeRows} loading={financeLoading} search={financeSearch} setSearch={setFinanceSearch} status={financeStatus} setStatus={setFinanceStatus} month={financeMonth} setMonth={setFinanceMonth} period={financePeriod} setPeriod={setFinancePeriod} onRefresh={loadFinance}/>}
+        {tab==="finance" && <FinanceDashboard rows={financeRows} loading={financeLoading} search={financeSearch} setSearch={setFinanceSearch} status={financeStatus} setStatus={setFinanceStatus} month={financeMonth} setMonth={setFinanceMonth} period={financePeriod} setPeriod={setFinancePeriod} onRefresh={loadFinance} lastLoaded={lastLoaded}/>}
         {tab==="debts" && (
           <DebtSection debts={debts} onAdd={()=>setShowDebt(true)}
             onToggle={async id=>{
