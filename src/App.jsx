@@ -622,9 +622,25 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     if (!dateStr) return 999;
     return Math.floor((todayDate - new Date(dateStr)) / 86400000);
   }
-  // cpMap: БҮГД rows-аас (filter огт хамаарахгүй) харилцагч бүрийн нийт мэдээлэл
+  // CRM: зөвхөн хугацааны filter хэрэглэнэ (статус, хайлт filter хамаарахгүй)
+  // ингэснээр сонгосон өдөр/7хон/сарын БҮГД харилцагч харагдана
+  const timeFiltered = rows.filter(r => {
+    let mOk = false;
+    if (month==="Бүгд") { mOk = true; }
+    else if (period==="өдөр") { mOk = r.date?.slice(0,10) === month; }
+    else if (period==="долоо хоног") {
+      const rDate = r.date?.slice(0,10);
+      if (rDate) {
+        const start = new Date(month);
+        const end = new Date(month); end.setDate(end.getDate()+6);
+        mOk = new Date(rDate) >= start && new Date(rDate) <= end;
+      }
+    } else { mOk = r.date?.startsWith(month); }
+    return mOk;
+  });
+  const cpFiltered = timeFiltered.filter(r => r.txStatus==="Амжилттай");
   const cpMap = {};
-  rows.filter(r=>r.txStatus==="Амжилттай").forEach(r => {
+  cpFiltered.forEach(r => {
     const cp = r.counterparty||"Тодорхойгүй";
     if (!cpMap[cp]) cpMap[cp]={amount:0,profitMNT:0,profitUSD:0,count:0,lastDate:"",months:{}};
     cpMap[cp].amount    += r.amount||0;
@@ -635,8 +651,8 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     const mk = r.date?.slice(0,7)||"";
     if (mk) cpMap[cp].months[mk] = (cpMap[cp].months[mk]||0) + (r.profitMNT||0);
   });
-  // Бүгдийг ашгаар эрэмбэл (топ 50)
-  const topCP = Object.entries(cpMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT).slice(0,50);
+  // Бүгдийг ашгаар эрэмбэл (хязгааргүй)
+  const topCP = Object.entries(cpMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT);
   const maxCPProfit = Math.max(...topCP.map(([,v])=>v.profitMNT),1);
 
   // ── CATEGORY ──
@@ -661,7 +677,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     </th>;
   }
 
-  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачааллаж байна...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачаалж байна...</div>;
   if (!rows.length) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл олдсонгүй</div>;
 
   const pageRows = sorted.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -771,7 +787,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         </div>
         <button onClick={onRefresh} disabled={loading}
           style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s"}}>
-          {loading?"⏳ Ачааллаж...":"🔄 Шинэчлэх"}
+          {loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}
         </button>
       </div>
 
@@ -1150,7 +1166,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
