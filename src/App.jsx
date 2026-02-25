@@ -310,17 +310,13 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
 
 function fmtMNT(n) {
   if (!n && n !== 0) return "₮0";
-  const abs = Math.abs(Number(n));
-  const fmt = abs >= 1e12 ? (abs/1e12).toFixed(2)+"их наяд"
-            : abs >= 1e9  ? (abs/1e9).toFixed(2)+"тэр"
-            : abs >= 1e6  ? (abs/1e6).toFixed(1)+"сая"
-            : abs >= 1e3  ? (abs/1e3).toFixed(0)+"мян"
-            : abs.toFixed(0);
-  return (Number(n)<0?"-₮":"₮") + fmt;
+  const num = Number(n);
+  return (num<0?"-₮":"₮") + Math.abs(num).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtMNTFull(n) {
   if (!n && n!==0) return "₮0";
-  return (Number(n)<0?"-₮":"₮") + Math.abs(Number(n)).toLocaleString("mn-MN",{maximumFractionDigits:0});
+  const num = Number(n);
+  return (num<0?"-₮":"₮") + Math.abs(num).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtUSD(n) {
   if (!n && n!==0) return "$0.00";
@@ -339,58 +335,35 @@ function StatCard({label, value, sub, color, icon}) {
 
 
 function LiveClock() {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-
   // Монголын цаг: UTC+8 (Улаанбаатар)
-  const UB_OFFSET = 8 * 60;
+  const UB_OFFSET = 8 * 60; // minutes
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   const mn = new Date(utcMs + UB_OFFSET * 60000);
-
   const yy = mn.getFullYear();
-  const mo = String(mn.getMonth() + 1).padStart(2, "0");
-  const dd = String(mn.getDate()).padStart(2, "0");
-  const hh = String(mn.getHours()).padStart(2, "0");
-  const mm = String(mn.getMinutes()).padStart(2, "0");
-  const ss = String(mn.getSeconds()).padStart(2, "0");
-
+  const mo = String(mn.getMonth()+1).padStart(2,'0');
+  const dd = String(mn.getDate()).padStart(2,'0');
+  const hh = String(mn.getHours()).padStart(2,'0');
+  const mm = String(mn.getMinutes()).padStart(2,'0');
+  const ss = String(mn.getSeconds()).padStart(2,'0');
   return (
-    <div style={{ textAlign: "right" }}>
-      <div
-        style={{
-          fontSize: "18px",
-          fontWeight: 900,
-          color: "#fff",
-          letterSpacing: "0.05em",
-          lineHeight: 1,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {hh}:{mm}:{ss}
-      </div>
-      <div
-        style={{
-          fontSize: "11px",
-          color: "#93c5fd",
-          marginTop: "2px",
-          fontWeight: 600,
-        }}
-      >
-        {yy}.{mo}.{dd}
-      </div>
+    <div style={{textAlign:"right"}}>
+      <div style={{fontSize:"18px",fontWeight:900,color:"#fff",letterSpacing:"0.05em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{hh}:{mm}:{ss}</div>
+      <div style={{fontSize:"11px",color:"#93c5fd",marginTop:"2px",fontWeight:600}}>{yy}.{mo}.{dd}</div>
     </div>
   );
 }
 
-function LineChart({ data, maxProfit }) {
-  const W = 600, H = 140, PAD = { t:24, r:16, b:28, l:64 };
+
+function LineChart({ data, divider }) {
+  const W = 600, H = 160, PAD = { t:20, r:16, b:32, l:80 };
   const iW = W - PAD.l - PAD.r;
   const iH = H - PAD.t - PAD.b;
-  if (!data.length) return <div style={{color:"#94a3b8",fontSize:"13px",padding:"20px 0"}}>Өгөгдөл байхгүй</div>;
+  if (!data || !data.length) return <div style={{color:"#94a3b8",fontSize:"13px",padding:"30px 0",textAlign:"center"}}>Өгөгдөл байхгүй</div>;
 
   const vals = data.map(([,v]) => v.profitMNT);
   const minV = Math.min(...vals, 0);
@@ -403,47 +376,70 @@ function LineChart({ data, maxProfit }) {
   const pts = data.map(([,v],i) => `${xPos(i)},${yPos(v.profitMNT)}`).join(" ");
   const zeroY = yPos(0);
 
-  // Area fill path
-  const areaPos = `M${xPos(0)},${zeroY} ` +
-    data.map(([,v],i) => v.profitMNT>=0 ? `L${xPos(i)},${yPos(v.profitMNT)}` : "").filter(Boolean).join(" ") + ` L${xPos(data.length-1)},${zeroY} Z`;
+  // 5 Y tick
+  const tickCount = 4;
+  const ticks = Array.from({length:tickCount+1},(_,i)=>minV + (maxV-minV)*i/tickCount).map(v=>({v,y:yPos(v)}));
 
-  // Ticks on Y
-  const ticks = [minV, (minV+maxV)/2, maxV].map(v => ({v, y: yPos(v)}));
+  // Label: сар бол "MM", өдөр бол "DD", 7хон бол "DD"
+  function xLabel(k) {
+    if (!k || k==="?") return "";
+    if (k.length===7) return k.slice(5); // YYYY-MM → MM
+    return k.slice(5).replace("-","/");   // YYYY-MM-DD → MM/DD
+  }
+
+  const showEvery = data.length > 20 ? Math.ceil(data.length/10) : data.length > 10 ? 2 : 1;
 
   return (
     <div style={{overflowX:"auto"}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:"320px",height:`${H}px`}}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:"280px",height:`${H}px`,display:"block"}}>
         <defs>
-          <linearGradient id="lg_pos" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0e9f6e" stopOpacity="0.25"/>
+          <linearGradient id="lg_g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#0e9f6e" stopOpacity="0.18"/>
             <stop offset="100%" stopColor="#0e9f6e" stopOpacity="0"/>
           </linearGradient>
+          <linearGradient id="lg_r" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity="0"/>
+            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.12"/>
+          </linearGradient>
         </defs>
-        {/* Grid lines */}
+        {/* Grid */}
         {ticks.map((t,i) => (
           <g key={i}>
             <line x1={PAD.l} y1={t.y} x2={W-PAD.r} y2={t.y} stroke="#f1f5f9" strokeWidth="1"/>
-            <text x={PAD.l-4} y={t.y+4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtMNT(t.v)}</text>
+            <text x={PAD.l-6} y={t.y+4} textAnchor="end" fontSize="9" fill="#94a3b8">
+              {t.v===0?"0":t.v>=1e6?(t.v/1e6).toFixed(1)+"M":t.v>=1e3?(t.v/1e3).toFixed(0)+"K":t.v.toFixed(0)}
+            </text>
           </g>
         ))}
         {/* Zero line */}
-        <line x1={PAD.l} y1={zeroY} x2={W-PAD.r} y2={zeroY} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4,2"/>
-        {/* Area */}
+        <line x1={PAD.l} y1={zeroY} x2={W-PAD.r} y2={zeroY} stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,3"/>
+        {/* Divider: өмнөх period vs тухайн */}
+        {divider!=null && divider>0 && divider<data.length && (
+          <g>
+            <line x1={xPos(divider-0.5)} y1={PAD.t} x2={xPos(divider-0.5)} y2={H-PAD.b} stroke="#e2e8f0" strokeWidth="1.5" strokeDasharray="6,3"/>
+            <text x={xPos(Math.floor(divider/2))} y={PAD.t-4} textAnchor="middle" fontSize="8" fill="#94a3b8">өмнөх</text>
+            <text x={xPos(divider+Math.floor((data.length-divider)/2))} y={PAD.t-4} textAnchor="middle" fontSize="8" fill="#1a56db">тухайн</text>
+          </g>
+        )}
+        {/* Area above zero */}
         <path d={`M${xPos(0)},${zeroY} ${data.map(([,v],i)=>`L${xPos(i)},${yPos(v.profitMNT)}`).join(" ")} L${xPos(data.length-1)},${zeroY} Z`}
-          fill="url(#lg_pos)" opacity="0.7"/>
+          fill="url(#lg_g)" opacity="0.8"/>
+        {/* Area below zero */}
+        <path d={`M${xPos(0)},${zeroY} ${data.map(([,v],i)=>`L${xPos(i)},${yPos(v.profitMNT)}`).join(" ")} L${xPos(data.length-1)},${zeroY} Z`}
+          fill="url(#lg_r)" opacity="0.8"/>
         {/* Line */}
-        <polyline points={pts} fill="none" stroke="#0e9f6e" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-        {/* Dots + labels */}
+        <polyline points={pts} fill="none" stroke="#0e9f6e" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        {/* Dots */}
         {data.map(([k,v],i) => {
           const cx = xPos(i), cy = yPos(v.profitMNT);
-          const pos = v.profitMNT >= 0;
-          const showEvery = data.length > 16 ? Math.ceil(data.length/12) : 1;
+          const col = v.profitMNT>=0?"#0e9f6e":"#ef4444";
           return (
             <g key={k}>
-              <circle cx={cx} cy={cy} r="3.5" fill={pos?"#0e9f6e":"#ef4444"} stroke="#fff" strokeWidth="1.5"/>
-              {i%showEvery===0 && <text x={cx} y={H-6} textAnchor="middle" fontSize="8" fill="#94a3b8" transform={data.length>10?`rotate(-35,${cx},${H-6})`:""}>
-                {k.slice(5)}
-              </text>}
+              <circle cx={cx} cy={cy} r="3" fill={col} stroke="#fff" strokeWidth="1.5"/>
+              {i%showEvery===0 && (
+                <text x={cx} y={H-4} textAnchor="middle" fontSize="8" fill="#94a3b8"
+                  transform={data.length>12?`rotate(-40,${cx},${H-4})`:""}>{xLabel(k)}</text>
+              )}
             </g>
           );
         })}
@@ -472,7 +468,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     rows.map(r => r.date?.slice(0,7)).filter(Boolean)
   )).sort().reverse()];
 
-  const statuses = ["Бүгд", "Амжилттай", "Хүлээгдэж буй", "Хүлээгдэж байгаа", "Цуцласан"];
+  const statuses = ["Бүгд", "Амжилттай", "Хүлээгдэж буй", "Цуцласан"];
 
   // Filter
   const q = search.toLowerCase();
@@ -522,53 +518,97 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   const waitingTotal= waiting.reduce((s,r)=>s+(r.totalPrice||0),0);
   const waitingProfit=waiting.reduce((s,r)=>s+(r.profitMNT||0),0);
 
-  // ── Өмнөх сарын харьцуулалт ──
-  function prevMonthKey(ym) {
-    if (!ym || ym==="Бүгд") return null;
-    const [y,m] = ym.split("-").map(Number);
-    const pm = m===1 ? 12 : m-1;
-    const py = m===1 ? y-1 : y;
-    return `${py}-${String(pm).padStart(2,"0")}`;
+  // ── Өмнөх period-тэй харьцуулалт (өдөр/7хон/сар) ──
+  function getPrevPeriodRows() {
+    if (month==="Бүгд") return [];
+    const succ = rows.filter(r=>r.txStatus==="Амжилттай");
+    if (period==="өдөр") {
+      // өмнөх өдөр
+      const d = new Date(month); d.setDate(d.getDate()-1);
+      const prev = d.toISOString().slice(0,10);
+      return succ.filter(r=>r.date?.slice(0,10)===prev);
+    } else if (period==="долоо хоног") {
+      // month = Даваа хоног → 7 хоног өмнөх Даваа
+      const d = new Date(month); d.setDate(d.getDate()-7);
+      const prevMon = d.toISOString().slice(0,10);
+      const prevSun = new Date(d); prevSun.setDate(prevSun.getDate()+6);
+      return succ.filter(r=>{
+        const rd = r.date?.slice(0,10);
+        return rd && rd>=prevMon && rd<=prevSun.toISOString().slice(0,10);
+      });
+    } else {
+      // сар → өмнөх сар
+      const [y,m2] = month.slice(0,7).split("-").map(Number);
+      const pm = m2===1?12:m2-1, py = m2===1?y-1:y;
+      const prevKey = `${py}-${String(pm).padStart(2,"0")}`;
+      return succ.filter(r=>r.date?.startsWith(prevKey));
+    }
   }
-  const prevKey = prevMonthKey(month);
-  const prevRows = prevKey ? rows.filter(r =>
-    r.date?.startsWith(prevKey) &&
-    (r.txStatus==="Амжилттай")
-  ) : [];
+  const prevRows    = getPrevPeriodRows();
   const prevProfMNT = prevRows.reduce((s,r)=>s+(r.profitMNT||0),0);
   const prevTotal   = prevRows.reduce((s,r)=>s+(r.totalPrice||0),0);
   const profitChange = prevProfMNT!==0 ? ((totProfMNT-prevProfMNT)/Math.abs(prevProfMNT)*100) : null;
   const totalChange  = prevTotal!==0   ? ((totTotal-prevTotal)/Math.abs(prevTotal)*100) : null;
+  // Харуулах label
+  const prevLabel = period==="өдөр"?"Өчигдөр":period==="долоо хоног"?"Өмнөх 7 хон":"Өмнөх сар";
 
   // ── GRAPH DATA ──
-  // Period grouping
-  function groupKey(dateStr) {
-    if (!dateStr) return "?";
-    if (period==="өдөр")  return dateStr.slice(0,10);
-    if (period==="долоо хоног") {
-      const d = new Date(dateStr);
-      const day = d.getDay()||7;
-      const mon = new Date(d); mon.setDate(d.getDate()-day+1);
-      return mon.toISOString().slice(0,10)+" 7хон";
+  // Өдрөөр: тухайн өдөр + өмнөх өдрийг харьцуулах (2 цэг)
+  // 7 хоног: тухайн 7 хоног + өмнөх 7 хоног (14 өдөр)
+  // Сар: олон сарын trend (сүүлийн 24 сар)
+  function buildGraphData() {
+    const succ = rows.filter(r=>r.txStatus==="Амжилттай");
+    if (period==="өдөр" && month!=="Бүгд") {
+      // Өмнөх өдөр + тухайн өдөр
+      const d = new Date(month); d.setDate(d.getDate()-1);
+      const prevDay = d.toISOString().slice(0,10);
+      const days = [prevDay, month];
+      return days.map(day => {
+        const dayRows = succ.filter(r=>r.date?.slice(0,10)===day);
+        return [day, {
+          profitMNT: dayRows.reduce((s,r)=>s+(r.profitMNT||0),0),
+          profitUSD: dayRows.reduce((s,r)=>s+(r.profitUSD||0),0),
+          amount:    dayRows.reduce((s,r)=>s+(r.amount||0),0),
+          count:     dayRows.length
+        }];
+      });
+    } else if (period==="долоо хоног" && month!=="Бүгд") {
+      // Өмнөх 7 хоног + тухайн 7 хоног → өдрөөр задал (14 өдөр)
+      const start = new Date(month); start.setDate(start.getDate()-7);
+      const result = [];
+      for (let i=0; i<14; i++) {
+        const d = new Date(start); d.setDate(start.getDate()+i);
+        const ds = d.toISOString().slice(0,10);
+        const dayRows = succ.filter(r=>r.date?.slice(0,10)===ds);
+        result.push([ds, {
+          profitMNT: dayRows.reduce((s,r)=>s+(r.profitMNT||0),0),
+          profitUSD: dayRows.reduce((s,r)=>s+(r.profitUSD||0),0),
+          amount:    dayRows.reduce((s,r)=>s+(r.amount||0),0),
+          count:     dayRows.length
+        }]);
+      }
+      return result;
+    } else {
+      // Сар: сүүлийн 24 сарын trend (бүгд rows-аас)
+      const gm = {};
+      succ.forEach(r => {
+        const k = r.date?.slice(0,7)||"?";
+        if (!gm[k]) gm[k]={profitMNT:0,profitUSD:0,amount:0,count:0};
+        gm[k].profitMNT += r.profitMNT||0;
+        gm[k].profitUSD += r.profitUSD||0;
+        gm[k].amount    += r.amount||0;
+        gm[k].count++;
+      });
+      return Object.entries(gm).sort((a,b)=>a[0].localeCompare(b[0])).slice(-24);
     }
-    return dateStr.slice(0,7);
   }
-
-  const graphMap = {};
-  conf.forEach(r => {
-    const k = groupKey(r.date);
-    if (!graphMap[k]) graphMap[k] = {profitMNT:0, profitUSD:0, amount:0, count:0};
-    graphMap[k].profitMNT += r.profitMNT||0;
-    graphMap[k].profitUSD += r.profitUSD||0;
-    graphMap[k].amount    += r.amount||0;
-    graphMap[k].count++;
-  });
-  const graphData = Object.entries(graphMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-24);
+  const graphData = buildGraphData();
+  // Өдрийн graph-д хуваагч шугам (өмнөх 7 хоног vs тухайн)
+  const graphDivider = (period==="долоо хоног" && month!=="Бүгд") ? 7 : null;
   const maxProfit = Math.max(...graphData.map(([,v])=>Math.abs(v.profitMNT)),1);
-  const maxAmount = Math.max(...graphData.map(([,v])=>v.amount),1);
 
   // ── TOP COUNTERPARTIES ──
-  // Use ALL rows (not just filtered) for recency/cold so month filter doesn't affect it
+  // cpMapAll: БҮГД амжилттай гүйлгээнээс recency/cold тооцно (filter хамаарахгүй)
   const cpMapAll = {};
   rows.filter(r=>r.txStatus==="Амжилттай").forEach(r => {
     const cp = r.counterparty||"Тодорхойгүй";
@@ -577,15 +617,14 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     if (!cpMapAll[cp].lastDate || r.date > cpMapAll[cp].lastDate) cpMapAll[cp].lastDate = r.date;
     if (!cpMapAll[cp].firstDate || r.date < cpMapAll[cp].firstDate) cpMapAll[cp].firstDate = r.date;
   });
-  // Days since last transaction (recency)
-  const today = new Date();
+  const todayDate = new Date();
   function daysSince(dateStr) {
     if (!dateStr) return 999;
-    return Math.floor((today - new Date(dateStr)) / 86400000);
+    return Math.floor((todayDate - new Date(dateStr)) / 86400000);
   }
-
+  // cpMap: БҮГД rows-аас (filter огт хамаарахгүй) харилцагч бүрийн нийт мэдээлэл
   const cpMap = {};
-  conf.forEach(r => {
+  rows.filter(r=>r.txStatus==="Амжилттай").forEach(r => {
     const cp = r.counterparty||"Тодорхойгүй";
     if (!cpMap[cp]) cpMap[cp]={amount:0,profitMNT:0,profitUSD:0,count:0,lastDate:"",months:{}};
     cpMap[cp].amount    += r.amount||0;
@@ -596,7 +635,8 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     const mk = r.date?.slice(0,7)||"";
     if (mk) cpMap[cp].months[mk] = (cpMap[cp].months[mk]||0) + (r.profitMNT||0);
   });
-  const topCP = Object.entries(cpMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT).slice(0,12);
+  // Бүгдийг ашгаар эрэмбэл (топ 50)
+  const topCP = Object.entries(cpMap).sort((a,b)=>b[1].profitMNT-a[1].profitMNT).slice(0,50);
   const maxCPProfit = Math.max(...topCP.map(([,v])=>v.profitMNT),1);
 
   // ── CATEGORY ──
@@ -612,7 +652,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
 
   const COLORS = ["#1a56db","#0e9f6e","#7e3af2","#f59e0b","#ef4444","#06b6d4","#f97316","#ec4899"];
 
-  const cardStyle = {background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)"};
+  const cardStyle = {background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",overflow:"hidden"};
 
   function SortTh({col,label}) {
     return <th onClick={()=>{setSortCol(col);setSortDir(sortCol===col?-sortDir:-1);setPage(0);}}
@@ -621,7 +661,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     </th>;
   }
 
-  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачаалж байна...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачааллаж байна...</div>;
   if (!rows.length) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл олдсонгүй</div>;
 
   const pageRows = sorted.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -731,7 +771,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         </div>
         <button onClick={onRefresh} disabled={loading}
           style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s"}}>
-          {loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}
+          {loading?"⏳ Ачааллаж...":"🔄 Шинэчлэх"}
         </button>
       </div>
 
@@ -747,7 +787,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
             {totalChange!==null && <span style={{fontSize:"11px",fontWeight:700,color:totalChange>=0?"#0e9f6e":"#ef4444",background:totalChange>=0?"#d1fae5":"#fee2e2",borderRadius:"5px",padding:"2px 6px"}}>{totalChange>=0?"↑":"↓"}{Math.abs(totalChange).toFixed(1)}%</span>}
             <span style={{fontSize:"11px",color:"#94a3b8"}}>{success.length} амжилттай</span>
           </div>
-          {prevTotal>0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>Өнгөрсөн сар: {fmtMNT(prevTotal)}</div>}
+          {prevTotal>0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>{prevLabel}: {fmtMNT(prevTotal)}</div>}
         </div>
 
         {/* Ашиг */}
@@ -758,7 +798,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
             {profitChange!==null && <span style={{fontSize:"11px",fontWeight:700,color:profitChange>=0?"#0e9f6e":"#ef4444",background:profitChange>=0?"#d1fae5":"#fee2e2",borderRadius:"5px",padding:"2px 6px"}}>{profitChange>=0?"↑":"↓"}{Math.abs(profitChange).toFixed(1)}%</span>}
             <span style={{fontSize:"11px",color:"#94a3b8"}}>{fmtUSD(totProfUSD)}</span>
           </div>
-          {prevProfMNT!==0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>Өнгөрсөн сар: {fmtMNT(prevProfMNT)}</div>}
+          {prevProfMNT!==0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>{prevLabel}: {fmtMNT(prevProfMNT)}</div>}
         </div>
       </div>
 
@@ -789,7 +829,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       </div>
 
       {/* ── CHARTS ROW ── */}
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"16px",marginBottom:"20px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"16px",marginBottom:"20px",alignItems:"start"}}>
 
         {/* PROFIT CHART */}
         <div style={cardStyle}>
@@ -805,7 +845,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
               ))}
             </div>
           </div>
-          <LineChart data={graphData} maxProfit={maxProfit}/>
+          <LineChart data={graphData} divider={graphDivider}/>
         </div>
 
         {/* TOP CATEGORIES */}
@@ -854,11 +894,12 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
                 const isCold = days>60 && totalTx>=2;
                 const isNew  = totalTx===1;
                 const isActive = days<=14;
-                // Trend: сүүлийн 2 сарын ашгийг харьцуул
+                // Трэнд: сүүлийн 2 сартай харьцуул
                 const mkeys = Object.keys(v.months).sort();
-                const lastM = mkeys.length>=1 ? v.months[mkeys[mkeys.length-1]]||0 : 0;
-                const prevM = mkeys.length>=2 ? v.months[mkeys[mkeys.length-2]]||0 : null;
-                const trend = prevM!==null ? (lastM>prevM?"↑":lastM<prevM?"↓":"→") : "—";
+                const lastM = mkeys.length>=1 ? (v.months[mkeys[mkeys.length-1]]||0) : 0;
+                const prevM = mkeys.length>=2 ? (v.months[mkeys[mkeys.length-2]]||0) : (mkeys.length===1 ? 0 : null);
+                const trendPct = (prevM!==null && prevM!==0) ? ((lastM-prevM)/Math.abs(prevM)*100) : null;
+                const trend = prevM===null ? "—" : lastM>prevM ? "↑" : lastM<prevM ? "↓" : "→";
                 const trendColor = trend==="↑"?"#0e9f6e":trend==="↓"?"#ef4444":"#94a3b8";
                 // Status badge
                 let badge, badgeBg, badgeColor;
@@ -897,14 +938,14 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
                       <span style={{fontSize:"10px",fontWeight:700,color:badgeColor,background:badgeBg,borderRadius:"6px",padding:"3px 7px",whiteSpace:"nowrap"}}>{badge}</span>
                     </td>
                     <td style={{padding:"10px",textAlign:"center"}}>
-                      {prevM!==null ? (
+                      {trend==="—" ? <span style={{color:"#cbd5e1",fontSize:"12px"}}>—</span> : (
                         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}>
-                          <span style={{fontSize:"15px",fontWeight:900,color:trendColor,lineHeight:1}}>{trend}</span>
+                          <span style={{fontSize:"16px",fontWeight:900,color:trendColor,lineHeight:1}}>{trend}</span>
                           <span style={{fontSize:"9px",fontWeight:700,color:trendColor}}>
-                            {prevM!==0 ? Math.abs(((lastM-prevM)/Math.abs(prevM)*100)).toFixed(0)+"%" : "шинэ"}
+                            {trendPct!==null ? Math.abs(trendPct).toFixed(0)+"%" : ""}
                           </span>
                         </div>
-                      ) : <span style={{color:"#cbd5e1",fontSize:"12px"}}>—</span>}
+                      )}
                     </td>
                   </tr>
                 );
@@ -1109,7 +1150,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
