@@ -1128,7 +1128,17 @@ export default function App() {
   const [viewTxFor, setViewTxFor]   = useState(null);
   const [editBalFor, setEditBalFor] = useState(null);
   const [showDebt, setShowDebt]     = useState(false);
-  const [financeRows, setFinanceRows] = useState([]);
+  const [financeRows, setFinanceRows] = useState(() => {
+    // Хуудас нээхэд кэшнээс шууд ачаална → loading үзэгдэхгүй
+    try {
+      const c = localStorage.getItem("oyuns_action=getFinance");
+      if (c) {
+        const { ts, data } = JSON.parse(c);
+        if (Date.now() - ts < CACHE_TTL && data?.rows?.length > 0) return data.rows;
+      }
+    } catch(e) {}
+    return [];
+  });
   const [financeLoading, setFinanceLoading] = useState(false);
   const [financeSearch, setFinanceSearch] = useState("");
   const [financeStatus, setFinanceStatus] = useState("Бүгд");
@@ -1161,7 +1171,9 @@ export default function App() {
 
   const loadFinance = async (force=false) => {
     if (force) clearApiCache();
-    setFinanceLoading(true);
+    // Кэш байвал loading spinner харуулахгүй — background-д шинэчилнэ
+    const hasCached = financeRows.length > 0 && !force;
+    if (!hasCached) setFinanceLoading(true);
     try {
       const data = await apiGet({ action:"getFinance" }, force);
       if (data.ok) {
@@ -1174,7 +1186,15 @@ export default function App() {
 
   useEffect(() => {
     if (tab !== "finance") return;
-    if (financeRows.length === 0) loadFinance();
+    // Кэш байвал background-д шинэчилнэ (5 минутын хугацаа дууссан бол)
+    try {
+      const c = localStorage.getItem("oyuns_action=getFinance");
+      if (c) {
+        const { ts } = JSON.parse(c);
+        if (Date.now() - ts < CACHE_TTL) return; // Кэш хүчинтэй, fetch хийхгүй
+      }
+    } catch(e) {}
+    loadFinance();
   }, [tab]);
   async function handleSaveTx(tx) {
     setTx(prev=>[...prev,tx]);
