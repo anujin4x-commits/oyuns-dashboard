@@ -912,7 +912,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{fmtUSD(totProfUSD)}</div>
         </div>
 
-        {/* 3. Хүлээгдэж буй зөрүү */}
+        {/* 3. Хүлээгдэж буй үнийн дүн */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #f59e0b"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй зөрүү</div>
           <div style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totDiff)}</div>
@@ -987,7 +987,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           </div>
           {/* Гараг — Ангилалын доор, flex:1-ээр үлдсэн зайг дүүргэнэ */}
           <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px",marginTop:"14px",flex:1,display:"flex",flexDirection:"column"}}>
-            <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"10px"}}>📆 Гарагаар</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"10px"}}>📆 Өдөр</div>
             <div style={{display:"flex",gap:"4px",alignItems:"flex-end",flex:1,minHeight:"60px"}}>
               {Object.entries(dowMap).map(([dow,v])=>{
                 const maxDow = Math.max(...Object.values(dowMap).map(d=>d.profit),1);
