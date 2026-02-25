@@ -544,8 +544,8 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   const success  = filtered.filter(r => r.txStatus === "Амжилттай");
   const cancelled= filtered.filter(r => r.txStatus === "Цуцласан" || r.txStatus === "Цуцлагдсан");
 
-  const totProfMNT  = success.reduce((s,r)=>s+(r.profitMNT||0),0);
-  const totProfUSD  = success.reduce((s,r)=>s+(r.profitUSD||0),0);
+  const totProfMNT  = conf.reduce((s,r)=>s+(r.profitMNT||0),0);   // амжилттай + хүлээгдэж буй
+  const totProfUSD  = conf.reduce((s,r)=>s+(r.profitUSD||0),0);
   const totTotal    = conf.reduce((s,r)=>s+(r.totalPrice||0),0);
   const totReceived = conf.reduce((s,r)=>s+(r.received||0),0);
   const totDiff     = conf.reduce((s,r)=>s+(r.difference||0),0);
@@ -646,7 +646,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   const maxProfit = Math.max(...graphData.map(([,v])=>Math.abs(v.profitMNT)),1);
 
   // ── Хамгийн идэвхтэй өдөр/сар ──
-  const allSucc = rows.filter(r=>r.txStatus==="Амжилттай");
+  const allSucc = rows.filter(r=>r.txStatus==="Амжилттай"||r.txStatus==="Хүлээгдэж буй"||r.txStatus==="Хүлээгдэж байгаа");
   // Өдрөөр задлах
   const dayMap = {};
   allSucc.forEach(r=>{
@@ -756,9 +756,9 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   return (
     <div style={{paddingBottom:"50px"}}>
 
-      {/* ── Товч СТАТИСТИК ── */}
+      {/* ── ХУРДАН СТАТИСТИК ── */}
       {(()=>{
-        const succ = rows.filter(r=>r.txStatus==="Амжилттай");
+        const succ = rows.filter(r=>r.txStatus!=="Цуцласан"&&r.txStatus!=="Цуцлагдсан");
         const tz8 = new Date(Date.now() + (new Date().getTimezoneOffset()+8*60)*60000);
         const todayStr   = tz8.toISOString().slice(0,10);
         const thisMonStr = todayStr.slice(0,7);
@@ -784,7 +784,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         ];
         return (
           <div style={{background:"#fff",borderRadius:"14px",padding:"16px 20px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:"16px"}}>
-            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Товч статистик</div>
+            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Хурдан статистик</div>
             <div style={{display:"grid",gridTemplateColumns:cols3,gap:"12px"}}>
               {sections.map(({label,color,rows:r,prevRows:pr,prevLabel})=>(
                 <div key={label} style={{background:color+"11",borderRadius:"12px",padding:"12px 14px",borderTop:`3px solid ${color}`}}>
@@ -898,7 +898,9 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
             {totalChange!==null && <span style={{fontSize:"11px",fontWeight:700,color:totalChange>=0?"#0e9f6e":"#ef4444",background:totalChange>=0?"#d1fae5":"#fee2e2",borderRadius:"5px",padding:"2px 6px"}}>{totalChange>=0?"↑":"↓"}{Math.abs(totalChange).toFixed(1)}%</span>}
           </div>
           {prevTotal>0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"4px"}}>{prevLabel}: {fmtMNT(prevTotal)}</div>}
-          <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{success.length} амжилттай</div>
+          <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>
+            {conf.length} гүйлгээ{waiting.length>0 && <span style={{color:"#f59e0b",fontWeight:600}}> · {waiting.length} хүлээгдэж буй</span>}
+          </div>
         </div>
 
         {/* 2. Нийт ашиг */}
@@ -912,27 +914,23 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{fmtUSD(totProfUSD)}</div>
         </div>
 
-        {/* 3. Хүлээгдэж буй үнийн дүн */}
+        {/* 3. Хүлээгдэж буй зөрүү — Sheet X багана (difference) шууд */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #f59e0b"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй үнийн дүн</div>
           <div style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totDiff)}</div>
-          <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{unpaidRows.length} гүйлгээ · {waiting.length} хүлээгдэж буй</div>
-          {/* Хэнээс хүлээгдэж байгаа жагсаалт */}
+          <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{waiting.length} гүйлгээ хүлээгдэж буй</div>
+          {/* Харилцагчаар X багана (difference)-г нэгтгэж харуулна */}
           {(()=>{
-            // Зөрүүтэй харилцагчдын жагсаалт (difference < 0 буюу received < totalPrice)
+            // conf (амжилттай + хүлээгдэж буй) дотроос difference != 0 байгааг харуулна
             const diffMap = {};
-            unpaidRows.forEach(r => {
+            conf.forEach(r => {
+              const diff = r.difference || 0;
+              if (diff === 0) return;
               const cp = r.counterparty || "Тодорхойгүй";
               if (!diffMap[cp]) diffMap[cp] = 0;
-              diffMap[cp] += (r.totalPrice||0) - (r.received||0);
+              diffMap[cp] += diff;
             });
-            // Хүлээгдэж буй статустай харилцагчид
-            waiting.forEach(r => {
-              const cp = r.counterparty || "Тодорхойгүй";
-              if (!diffMap[cp]) diffMap[cp] = 0;
-              diffMap[cp] += (r.totalPrice||0);
-            });
-            const list = Object.entries(diffMap).sort((a,b)=>b[1]-a[1]);
+            const list = Object.entries(diffMap).filter(([,v])=>v!==0).sort((a,b)=>b[1]-a[1]);
             if (!list.length) return <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"6px"}}>Зөрүү байхгүй</div>;
             return (
               <div style={{marginTop:"8px",display:"flex",flexDirection:"column",gap:"3px"}}>
@@ -1341,7 +1339,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
