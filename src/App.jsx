@@ -514,9 +514,15 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
   const totProfMNT  = success.reduce((s,r)=>s+(r.profitMNT||0),0);
   const totProfUSD  = success.reduce((s,r)=>s+(r.profitUSD||0),0);
   const totTotal    = conf.reduce((s,r)=>s+(r.totalPrice||0),0);
+  const totReceived = conf.reduce((s,r)=>s+(r.received||0),0);
+  const totDiff     = conf.reduce((s,r)=>s+(r.difference||0),0);
   const totCancelled= cancelled.reduce((s,r)=>s+(r.amount||0),0);
   const waitingTotal= waiting.reduce((s,r)=>s+(r.totalPrice||0),0);
   const waitingProfit=waiting.reduce((s,r)=>s+(r.profitMNT||0),0);
+  // Орж ирээгүй гүйлгээ: амжилттай боловч received < totalPrice
+  const unpaidRows  = success.filter(r=>(r.totalPrice||0)>0 && (r.received||0)<(r.totalPrice||0));
+  const unpaidTotal = unpaidRows.reduce((s,r)=>s+((r.totalPrice||0)-(r.received||0)),0);
+  const collectionRate = totTotal>0 ? (totReceived/totTotal*100) : null;
 
   // ── Өмнөх period-тэй харьцуулалт (өдөр/7хон/сар) ──
   function getPrevPeriodRows() {
@@ -792,51 +798,79 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       </div>
 
       {/* ── SUMMARY CARDS ── */}
-      {/* 1-р мөр: Нийт үнийн дүн + Ашиг */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"10px"}}>
 
         {/* Нийт үнийн дүн */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"14px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #1a56db"}}>
-          <div style={{fontSize:"10px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"5px",whiteSpace:"nowrap"}}>💰 Нийт үнийн дүн</div>
-          <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+          <div style={{fontSize:"10px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"5px"}}>💰 Нийт үнийн дүн</div>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
             <span style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totTotal)}</span>
             {totalChange!==null && <span style={{fontSize:"11px",fontWeight:700,color:totalChange>=0?"#0e9f6e":"#ef4444",background:totalChange>=0?"#d1fae5":"#fee2e2",borderRadius:"5px",padding:"2px 6px"}}>{totalChange>=0?"↑":"↓"}{Math.abs(totalChange).toFixed(1)}%</span>}
-            <span style={{fontSize:"11px",color:"#94a3b8"}}>{success.length} амжилттай</span>
           </div>
-          {prevTotal>0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>{prevLabel}: {fmtMNT(prevTotal)}</div>}
+          {prevTotal>0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"2px"}}>{prevLabel}: {fmtMNT(prevTotal)}</div>}
+          {unpaidRows.length>0 && (
+            <div style={{marginTop:"8px",paddingTop:"8px",borderTop:"1px dashed #e2e8f0"}}>
+              <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"4px"}}>
+                ⏳ Хүлээгдэж буй зөрүү — <span style={{fontWeight:700,color:"#f59e0b"}}>{fmtMNT(unpaidTotal)}</span>
+                <span style={{color:"#cbd5e1"}}> · {unpaidRows.length} гүйлгээ</span>
+              </div>
+              {unpaidRows.slice(0,4).map((r,i)=>(
+                <div key={i} onClick={()=>{setSearch(r.counterparty||"");setPage(0);}}
+                  style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"10px",color:"#94a3b8",marginTop:"2px",cursor:"pointer",gap:"6px"}}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· {r.counterparty||"?"}</span>
+                  <span style={{fontWeight:600,color:"#f59e0b",whiteSpace:"nowrap",flexShrink:0}}>{fmtMNT((r.totalPrice||0)-(r.received||0))}</span>
+                </div>
+              ))}
+              {unpaidRows.length>4 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"2px"}}>· +{unpaidRows.length-4} бусад</div>}
+            </div>
+          )}
         </div>
 
         {/* Ашиг */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"14px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:`5px solid ${totProfMNT>=0?"#0e9f6e":"#ef4444"}`}}>
-          <div style={{fontSize:"10px",fontWeight:700,color:totProfMNT>=0?"#0e9f6e":"#ef4444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"5px",whiteSpace:"nowrap"}}>📈 Ашиг</div>
-          <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+          <div style={{fontSize:"10px",fontWeight:700,color:totProfMNT>=0?"#0e9f6e":"#ef4444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"5px"}}>📈 Ашиг</div>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
             <span style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totProfMNT)}</span>
             {profitChange!==null && <span style={{fontSize:"11px",fontWeight:700,color:profitChange>=0?"#0e9f6e":"#ef4444",background:profitChange>=0?"#d1fae5":"#fee2e2",borderRadius:"5px",padding:"2px 6px"}}>{profitChange>=0?"↑":"↓"}{Math.abs(profitChange).toFixed(1)}%</span>}
             <span style={{fontSize:"11px",color:"#94a3b8"}}>{fmtUSD(totProfUSD)}</span>
           </div>
-          {prevProfMNT!==0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"3px"}}>{prevLabel}: {fmtMNT(prevProfMNT)}</div>}
+          {prevProfMNT!==0 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"2px"}}>{prevLabel}: {fmtMNT(prevProfMNT)}</div>}
+          {waiting.length>0 && (
+            <div style={{marginTop:"8px",paddingTop:"8px",borderTop:"1px dashed #e2e8f0"}}>
+              <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"4px"}}>
+                ⏳ Хүлээгдэж буй ашиг — <span style={{fontWeight:700,color:"#f59e0b"}}>{fmtMNT(waitingProfit)}</span>
+                <span style={{color:"#cbd5e1"}}> · {waiting.length} гүйлгээ</span>
+              </div>
+              {(()=>{
+                const wm={};
+                waiting.forEach(r=>{const k=r.counterparty||"?";if(!wm[k])wm[k]=0;wm[k]+=(r.profitMNT||0);});
+                return Object.entries(wm).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([cp,p],i)=>(
+                  <div key={i} onClick={()=>{setSearch(cp);setPage(0);}}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"10px",color:"#94a3b8",marginTop:"2px",cursor:"pointer",gap:"6px"}}>
+                    <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· {cp}</span>
+                    <span style={{fontWeight:600,color:"#f59e0b",whiteSpace:"nowrap",flexShrink:0}}>{fmtMNT(p)}</span>
+                  </div>
+                ));
+              })()}
+              {waiting.length>4 && <div style={{fontSize:"10px",color:"#cbd5e1",marginTop:"2px"}}>· +{waiting.length-4} бусад</div>}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 2-р мөр: 3 төлөвийн карт нэг шугамд */}
+      {/* 3 төлөвийн карт */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px",marginBottom:"20px"}}>
-
-        {/* Амжилттай */}
         <div style={{background:"#fff",borderRadius:"12px",padding:"12px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderTop:"3px solid #0e9f6e"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#0e9f6e",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"4px"}}>✅ Амжилттай</div>
           <div style={{fontWeight:900,fontSize:"18px",color:"#0f172a",lineHeight:1}}>{success.length}</div>
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMNT(success.reduce((s,r)=>s+(r.totalPrice||0),0))}</div>
         </div>
-
-        {/* Хүлээгдэж буй */}
         <div style={{background:"#fff",borderRadius:"12px",padding:"12px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderTop:"3px solid #f59e0b",cursor:"pointer"}}
           onClick={()=>setStatus(status==="Хүлээгдэж буй"?"Бүгд":"Хүлээгдэж буй")}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"4px"}}>⏳ Хүлээгдэж буй</div>
           <div style={{fontWeight:900,fontSize:"18px",color:"#0f172a",lineHeight:1}}>{waiting.length}</div>
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"3px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMNT(waitingTotal)} · <span style={{color:"#f59e0b",fontWeight:700}}>{fmtMNT(waitingProfit)}</span></div>
         </div>
-
-        {/* Цуцласан */}
         <div style={{background:"#fff",borderRadius:"12px",padding:"12px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderTop:"3px solid #ef4444"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#ef4444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"4px"}}>❌ Цуцласан</div>
           <div style={{fontWeight:900,fontSize:"18px",color:"#0f172a",lineHeight:1}}>{cancelled.length}</div>
