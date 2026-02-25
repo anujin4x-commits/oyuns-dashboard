@@ -215,15 +215,38 @@ function TxHistoryModal({ acc, transactions, onClose, onDelete }) {
 }
 
 function EditBalModal({ acc, bal, onClose, onSave }) {
-  const [val, setVal] = useState(bal);
+  const [val, setVal]   = useState(bal);
+  const [note, setNote] = useState("");
+  const diff = val - bal;
+  const sym  = acc.currency==="MNT"?"₮":acc.currency==="RUB"?"₽":"$";
+  function fmtDiff(n) {
+    const abs = Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+    return (n>=0?"+":"-") + sym + abs;
+  }
   return (
     <Modal title={`Үлдэгдэл засах — ${acc.name}`} onClose={onClose}>
-      <Field label={`Үлдэгдэл (${acc.currency})`}>
+      {/* Өмнөх үлдэгдэл */}
+      <div style={{background:"#f8fafc",borderRadius:"10px",padding:"12px 14px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:"10px",fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"3px"}}>Өмнөх үлдэгдэл</div>
+          <div style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{sym}{bal.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        {diff!==0 && (
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:"10px",fontWeight:700,color:"#94a3b8",marginBottom:"3px"}}>Өөрчлөлт</div>
+            <div style={{fontWeight:800,fontSize:"16px",color:diff>0?"#0e9f6e":"#ef4444"}}>{fmtDiff(diff)}</div>
+          </div>
+        )}
+      </div>
+      <Field label={`Шинэ үлдэгдэл (${acc.currency})`}>
         <input style={inp} type="number" value={val} onChange={e=>setVal(Number(e.target.value))}/>
+      </Field>
+      <Field label="Тайлбар (заавал биш)">
+        <input style={inp} value={note} onChange={e=>setNote(e.target.value)} placeholder="Жишээ: сарын тооцоо шалгасан"/>
       </Field>
       <div style={{display:"flex",gap:"10px",marginTop:"6px"}}>
         <Btn variant="ghost" onClick={onClose} style={{flex:1}}>Болих</Btn>
-        <Btn onClick={()=>{onSave(acc.id,val);onClose();}} style={{flex:1}}>Хадгалах</Btn>
+        <Btn onClick={()=>{onSave(acc.id,val,bal,note);onClose();}} style={{flex:1}}>Хадгалах</Btn>
       </div>
     </Modal>
   );
@@ -1543,9 +1566,30 @@ export default function App() {
 
       {addTxFor  && <AddTxModal acc={accounts.find(a=>a.id===addTxFor)} onClose={()=>setAddTxFor(null)} onSave={handleSaveTx}/>}
       {viewTxFor && <TxHistoryModal acc={accounts.find(a=>a.id===viewTxFor)} transactions={transactions} onClose={()=>setViewTxFor(null)} onDelete={handleDeleteTx}/>}
-      {editBalFor && <EditBalModal acc={accounts.find(a=>a.id===editBalFor)} bal={balances[editBalFor]||0} onClose={()=>setEditBalFor(null)} onSave={async(id,v)=>{
-        setBalances(prev=>({...prev,[id]:v}));
-        await apiPost({action:"setBalance",accountId:id,value:v});
+      {editBalFor && <EditBalModal acc={accounts.find(a=>a.id===editBalFor)} bal={balances[editBalFor]||0} onClose={()=>setEditBalFor(null)} onSave={async(id,newVal,oldVal,note)=>{
+        // 1. UI шууд шинэчлэх
+        setBalances(prev=>({...prev,[id]:newVal}));
+        // 2. Sheet-д үлдэгдэл хадгалах
+        await apiPost({action:"setBalance",accountId:id,value:newVal});
+        // 3. Хуулгад "Үлдэгдэл засав" гүйлгээ нэмэх
+        const diff = newVal - oldVal;
+        if (diff !== 0) {
+          const tx = {
+            id: Date.now().toString(),
+            accountId: id,
+            type: diff > 0 ? "Орлого" : "Зарлага",
+            amount: Math.abs(diff),
+            date: new Date().toISOString().slice(0,10),
+            counterparty: "Үлдэгдэл засварлалт",
+            rate: "",
+            ratePairLabel: "",
+            convertedAmount: null,
+            convertedCurrency: "",
+            note: note || `Өмнөх: ${oldVal.toLocaleString("en-US",{minimumFractionDigits:2})} → Шинэ: ${newVal.toLocaleString("en-US",{minimumFractionDigits:2})}`,
+          };
+          setTx(prev=>[...prev, tx]);
+          await apiPost({action:"addTransaction",data:tx});
+        }
       }}/>}
       {showDebt && <AddDebtModal onClose={()=>setShowDebt(false)} onSave={async d=>{setDebts(prev=>[...prev,d]);await apiPost({action:"addDebt",data:d});}}/>}
       {showAddAcc && <AddAccountModal onClose={()=>setShowAddAcc(false)} onSave={async(acc)=>{
