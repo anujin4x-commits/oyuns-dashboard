@@ -914,7 +914,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
 
         {/* 3. Хүлээгдэж буй үнийн дүн */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #f59e0b"}}>
-          <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй зөрүү</div>
+          <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй үнийн дүн</div>
           <div style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totDiff)}</div>
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{unpaidRows.length} гүйлгээ · {waiting.length} хүлээгдэж буй</div>
           {/* Хэнээс хүлээгдэж байгаа жагсаалт */}
