@@ -13,7 +13,7 @@ function useWindowWidth() {
 
 // ── Хэрэглэгчид + PIN (AppScript-д ч хадгална) ──
 const USERS = [
-  { id: "oyuns",    name: "Оюун",   username: "oyuns",    pin: "oyun$",  color: "#1a56db" },
+  { id: "oyuns",    name: "Сүрэнжав",   username: "oyuns",    pin: "oyun$",  color: "#1a56db" },
   { id: "anujin4x", name: "Анужин", username: "anujin4x", pin: "oyunx",  color: "#0e9f6e" },
 ];
 
