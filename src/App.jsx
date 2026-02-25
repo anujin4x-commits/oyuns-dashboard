@@ -1456,11 +1456,14 @@ export default function App() {
     loadFinance();
   }, [tab]);
   async function handleSaveTx(tx) {
-    setTx(prev=>[...prev,tx]);
+    // accountName: accounts-аас нэр олж нэм
+    const acc = accounts.find(a=>a.id===tx.accountId);
+    const txWithName = {...tx, accountName: acc ? acc.name : tx.accountId};
+    setTx(prev=>[...prev,txWithName]);
     const nb={...balances};
     nb[tx.accountId]=(nb[tx.accountId]||0)+(tx.type==="Орлого"?tx.amount:-tx.amount);
     setBalances(nb);
-    await apiPost({action:"addTransaction",data:tx});
+    await apiPost({action:"addTransaction",data:txWithName});
   }
 
   async function handleDeleteTx(id) {
@@ -1574,9 +1577,11 @@ export default function App() {
         // 3. Хуулгад "Үлдэгдэл засав" гүйлгээ нэмэх
         const diff = newVal - oldVal;
         if (diff !== 0) {
+          const balAcc = accounts.find(a=>a.id===id);
           const tx = {
             id: Date.now().toString(),
             accountId: id,
+            accountName: balAcc ? balAcc.name : id,
             type: diff > 0 ? "Орлого" : "Зарлага",
             amount: Math.abs(diff),
             date: new Date().toISOString().slice(0,10),
@@ -1597,7 +1602,8 @@ export default function App() {
         setAccounts(newAccs);
         setBalances(prev=>({...prev,[acc.id]:0}));
         localStorage.setItem("oyuns_accounts",JSON.stringify(newAccs));
-        await apiPost({action:"saveAccounts",accounts:newAccs});
+        // Sheet-д данс + 0 үлдэгдэл хадгалах
+        const res = await apiPost({action:"saveAccounts",accounts:newAccs});
         setShowAddAcc(false);
       }}/>}
     </div>
