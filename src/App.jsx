@@ -290,7 +290,7 @@ function AddAccountModal({ onClose, onSave }) {
             ))}
           </div>
         </Field>
-        <button disabled={!name.trim()} onClick={()=>onSave({id:"acc_"+Date.now(),name:name.trim(),currency:cur,type,color})}
+        <button disabled={!name.trim()} onClick={()=>{onSave({id:"acc_"+Date.now(),name:name.trim(),currency:cur,type,color});onClose();}}
           style={{padding:"13px",background:name.trim()?"#1a56db":"#e2e8f0",color:name.trim()?"#fff":"#94a3b8",border:"none",borderRadius:"12px",fontWeight:800,fontSize:"15px",cursor:name.trim()?"pointer":"default",fontFamily:"inherit"}}>
           Нэмэх
         </button>
@@ -1602,9 +1602,8 @@ export default function App() {
         setAccounts(newAccs);
         setBalances(prev=>({...prev,[acc.id]:0}));
         localStorage.setItem("oyuns_accounts",JSON.stringify(newAccs));
-        // Sheet-д данс + 0 үлдэгдэл хадгалах
-        const res = await apiPost({action:"saveAccounts",accounts:newAccs});
-        setShowAddAcc(false);
+        // Sheet-д Accounts tab + балансд хадгалах
+        await apiPost({action:"saveAccounts",accounts:newAccs});
       }}/>}
     </div>
   );
