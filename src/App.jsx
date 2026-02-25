@@ -870,7 +870,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{fmtUSD(totProfUSD)}</div>
         </div>
 
-        {/* 3. Хүлээгдэж буй зөрүү */}
+        {/* 3. Хүлээгдэж буй үнийн дүн */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #f59e0b"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй зөрүү</div>
           <div style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totDiff)}</div>
@@ -909,10 +909,10 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       </div>
 
       {/* ── CHARTS ROW ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"16px",marginBottom:"16px",alignItems:"start"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"16px",marginBottom:"16px",alignItems:"start"}}>
 
         {/* PROFIT CHART */}
-        <div style={{...cardStyle,gridColumn:"1 / -1"}}>
+        <div style={{...cardStyle,gridColumn:"1 / -1",minWidth:0}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}}>
             <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>📊 Ашгийн график</div>
             <div style={{display:"flex",gap:"4px"}}>
@@ -965,7 +965,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
                 <div style={{fontSize:"11px",color:"#1a56db",fontWeight:700}}>{fmtMNT(bestMon[1].profit)} · {bestMon[1].count} гүйлгээ</div>
               </div>
             )}
-            {/* Гарагаар */}
+            {/* Өдөр */}
             <div>
               <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>📆 Гарагаар</div>
               <div style={{display:"flex",gap:"3px",alignItems:"flex-end",height:"48px"}}>
@@ -989,6 +989,68 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           </div>
         </div>
       </div>
+
+      {/* ── ХУРДАН СТАТИСТИК ── */}
+      {(()=>{
+        const succ = rows.filter(r=>r.txStatus==="Амжилттай");
+        const tz8 = new Date(Date.now() + (new Date().getTimezoneOffset()+8*60)*60000);
+        const todayStr   = tz8.toISOString().slice(0,10);
+        const thisMonStr = todayStr.slice(0,7);
+        const monDay = (()=>{ const d=new Date(tz8); const day=d.getDay()||7; d.setDate(d.getDate()-day+1); return d.toISOString().slice(0,10); })();
+        const prevMonDay = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+        const prevMonStr = (()=>{ const [y,m]=thisMonStr.split("-").map(Number); return `${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,"0")}`; })();
+        const prevWeekSun = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+
+        const todayRows  = succ.filter(r=>r.date?.slice(0,10)===todayStr);
+        const weekRows   = succ.filter(r=>r.date?.slice(0,10)>=monDay && r.date?.slice(0,10)<=todayStr);
+        const monRows    = succ.filter(r=>r.date?.startsWith(thisMonStr));
+        const prevWRows  = succ.filter(r=>r.date?.slice(0,10)>=prevMonDay && r.date?.slice(0,10)<=prevWeekSun);
+        const prevMRows  = succ.filter(r=>r.date?.startsWith(prevMonStr));
+
+        function pct(a,b) {
+          if (!b) return null;
+          const p = (a-b)/Math.abs(b)*100;
+          return <span style={{fontSize:"10px",fontWeight:700,padding:"1px 5px",borderRadius:"5px",background:p>=0?"#d1fae5":"#fee2e2",color:p>=0?"#065f46":"#991b1b",marginLeft:"6px"}}>{p>=0?"↑":"↓"}{Math.abs(p).toFixed(0)}%</span>;
+        }
+        function sum(arr, key) { return arr.reduce((s,r)=>s+(r[key]||0),0); }
+
+        const sections = [
+          { label:"Өнөөдөр",     color:"#7e3af2", rows:todayRows,  prevRows:null,     prevLabel:null },
+          { label:"Энэ 7 хоног", color:"#0e9f6e", rows:weekRows,   prevRows:prevWRows, prevLabel:"Өмнөх 7 хон" },
+          { label:"Энэ сар",     color:"#1a56db", rows:monRows,    prevRows:prevMRows, prevLabel:"Өмнөх сар" },
+        ];
+
+        return (
+          <div style={{...cardStyle, marginBottom:"16px"}}>
+            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Хурдан статистик</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"12px"}}>
+              {sections.map(({label,color,rows:r,prevRows:pr,prevLabel})=>(
+                <div key={label} style={{background:color+"11",borderRadius:"12px",padding:"12px 14px",borderTop:`3px solid ${color}`}}>
+                  <div style={{fontSize:"10px",fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"8px"}}>{label}</div>
+                  <div style={{marginBottom:"6px"}}>
+                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Ашиг</div>
+                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{fmtMNT(sum(r,"profitMNT"))}</span>
+                      {pr && pct(sum(r,"profitMNT"), sum(pr,"profitMNT"))}
+                    </div>
+                    {pr && <div style={{fontSize:"9px",color:"#cbd5e1"}}>{prevLabel}: {fmtMNT(sum(pr,"profitMNT"))}</div>}
+                  </div>
+                  <div style={{marginBottom:"6px"}}>
+                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Нийт үнэ</div>
+                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,fontSize:"13px",color:"#0f172a"}}>{fmtMNT(sum(r,"totalPrice"))}</span>
+                      {pr && pct(sum(r,"totalPrice"), sum(pr,"totalPrice"))}
+                    </div>
+                  </div>
+                  <div style={{fontSize:"11px",color:"#64748b",borderTop:`1px dashed ${color}44`,paddingTop:"6px",marginTop:"4px"}}>
+                    {r.length} гүйлгээ
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── ХАРИЛЦАГЧИЙН ШИНЖИЛГЭЭ (CRM) ── */}
       <div style={{...cardStyle,marginBottom:"20px"}}>
