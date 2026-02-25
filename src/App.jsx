@@ -349,7 +349,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#93c5fd",marginTop:"10px",borderTop:"1px solid #dbeafe",paddingTop:"8px"}}>
-            {pending.filter(d=>d.debtType==="Авлага").length} хүлээгдэж буй бүртгэл
+            {pending.filter(d=>d.debtType==="Авлага").length} хүлээгдэж буй
           </div>
         </div>
 
@@ -368,7 +368,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#fcd34d",marginTop:"10px",borderTop:"1px solid #fde68a",paddingTop:"8px"}}>
-            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй бүртгэл
+            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй 
           </div>
         </div>
       </div>
