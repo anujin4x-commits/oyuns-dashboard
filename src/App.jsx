@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from "react";
 
+// ── Дэлгэцийн өргөнийг хянах hook ──
+function useWindowWidth() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1024);
+  useEffect(() => {
+    const handler = () => setW(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return w;
+}
+
 const ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
@@ -474,6 +485,12 @@ function MiniBar({value, max, color}) {
 }
 
 function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth, period, setPeriod, onRefresh, lastLoaded }) {
+  const winW = useWindowWidth();
+  const isMobile = winW < 640;      // утас
+  const isTablet = winW >= 640 && winW < 1024; // таблет
+  // Багануудын тоо: утсанд 1, таблет/ноутбукт 3
+  const cols3 = isMobile ? "1fr" : "repeat(3,1fr)";
+  const cols2 = isMobile ? "1fr" : "1fr 1fr";
   const [sortCol, setSortCol] = useState("date");
   const [sortDir, setSortDir] = useState(-1);
   const [page, setPage] = useState(0);
@@ -845,6 +862,68 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         </button>
       </div>
 
+      {/* ── ХУРДАН СТАТИСТИК ── */}
+      {(()=>{
+        const succ = rows.filter(r=>r.txStatus==="Амжилттай");
+        const tz8 = new Date(Date.now() + (new Date().getTimezoneOffset()+8*60)*60000);
+        const todayStr   = tz8.toISOString().slice(0,10);
+        const thisMonStr = todayStr.slice(0,7);
+        const monDay = (()=>{ const d=new Date(tz8); const day=d.getDay()||7; d.setDate(d.getDate()-day+1); return d.toISOString().slice(0,10); })();
+        const prevMonDay = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+        const prevMonStr = (()=>{ const [y,m]=thisMonStr.split("-").map(Number); return `${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,"0")}`; })();
+        const prevWeekSun = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+
+        const todayRows  = succ.filter(r=>r.date?.slice(0,10)===todayStr);
+        const weekRows   = succ.filter(r=>r.date?.slice(0,10)>=monDay && r.date?.slice(0,10)<=todayStr);
+        const monRows    = succ.filter(r=>r.date?.startsWith(thisMonStr));
+        const prevWRows  = succ.filter(r=>r.date?.slice(0,10)>=prevMonDay && r.date?.slice(0,10)<=prevWeekSun);
+        const prevMRows  = succ.filter(r=>r.date?.startsWith(prevMonStr));
+
+        function pct(a,b) {
+          if (!b) return null;
+          const p = (a-b)/Math.abs(b)*100;
+          return <span style={{fontSize:"10px",fontWeight:700,padding:"1px 5px",borderRadius:"5px",background:p>=0?"#d1fae5":"#fee2e2",color:p>=0?"#065f46":"#991b1b",marginLeft:"6px"}}>{p>=0?"↑":"↓"}{Math.abs(p).toFixed(0)}%</span>;
+        }
+        function sum(arr, key) { return arr.reduce((s,r)=>s+(r[key]||0),0); }
+
+        const sections = [
+          { label:"Өнөөдөр",     color:"#7e3af2", rows:todayRows,  prevRows:null,     prevLabel:null },
+          { label:"Энэ 7 хоног", color:"#0e9f6e", rows:weekRows,   prevRows:prevWRows, prevLabel:"Өмнөх 7 хон" },
+          { label:"Энэ сар",     color:"#1a56db", rows:monRows,    prevRows:prevMRows, prevLabel:"Өмнөх сар" },
+        ];
+
+        return (
+          <div style={{...cardStyle, marginBottom:"16px"}}>
+            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Хурдан статистик</div>
+            <div style={{display:"grid",gridTemplateColumns:cols3,gap:"12px"}}>
+              {sections.map(({label,color,rows:r,prevRows:pr,prevLabel})=>(
+                <div key={label} style={{background:color+"11",borderRadius:"12px",padding:"12px 14px",borderTop:`3px solid ${color}`}}>
+                  <div style={{fontSize:"10px",fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"8px"}}>{label}</div>
+                  <div style={{marginBottom:"6px"}}>
+                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Ашиг</div>
+                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{fmtMNT(sum(r,"profitMNT"))}</span>
+                      {pr && pct(sum(r,"profitMNT"), sum(pr,"profitMNT"))}
+                    </div>
+                    {pr && <div style={{fontSize:"9px",color:"#cbd5e1"}}>{prevLabel}: {fmtMNT(sum(pr,"profitMNT"))}</div>}
+                  </div>
+                  <div style={{marginBottom:"6px"}}>
+                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Нийт үнийн дүн</div>
+                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,fontSize:"13px",color:"#0f172a"}}>{fmtMNT(sum(r,"totalPrice"))}</span>
+                      {pr && pct(sum(r,"totalPrice"), sum(pr,"totalPrice"))}
+                    </div>
+                  </div>
+                  <div style={{fontSize:"11px",color:"#64748b",borderTop:`1px dashed ${color}44`,paddingTop:"6px",marginTop:"4px"}}>
+                    {r.length} гүйлгээ
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── SUMMARY CARDS ── */}
       <div style={{display:"flex",flexDirection:"column",gap:"10px",marginBottom:"20px"}}>
 
@@ -870,7 +949,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"4px"}}>{fmtUSD(totProfUSD)}</div>
         </div>
 
-        {/* 3. Хүлээгдэж буй үнийн дүн */}
+        {/* 3. Хүлээгдэж буй зөрүү */}
         <div style={{background:"#fff",borderRadius:"14px",padding:"16px 18px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",borderLeft:"5px solid #f59e0b"}}>
           <div style={{fontSize:"10px",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"6px"}}>⏳ Хүлээгдэж буй зөрүү</div>
           <div style={{fontWeight:900,fontSize:"22px",color:"#0f172a",lineHeight:1}}>{fmtMNT(totDiff)}</div>
@@ -909,7 +988,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       </div>
 
       {/* ── CHARTS ROW ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"16px",marginBottom:"16px",alignItems:"start"}}>
+      <div style={{display:"grid",gridTemplateColumns:cols3,gap:"16px",marginBottom:"16px",alignItems:"start"}}>
 
         {/* PROFIT CHART */}
         <div style={{...cardStyle,gridColumn:"1 / -1",minWidth:0}}>
@@ -945,112 +1024,56 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           </div>
         </div>
 
-        {/* ИДЭВХТЭЙ ЦАГ */}
+        {/* ӨНДӨР АШИГТАЙ ҮЕ — өдөр + сар хэвтээ, гараг доор */}
         <div style={cardStyle}>
-          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Өндөр ашигтай үе</div>
-          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-            {/* Хамгийн сайн өдөр */}
+          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"12px"}}>🏆 Өндөр ашигтай үе</div>
+
+          {/* Өдөр + Сар хэвтээ */}
+          <div style={{display:"grid",gridTemplateColumns:cols2,gap:"8px",marginBottom:"12px"}}>
             {bestDay && (
               <div style={{background:"#f0fdf4",borderRadius:"10px",padding:"10px 12px"}}>
-                <div style={{fontSize:"10px",fontWeight:700,color:"#0e9f6e",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"3px"}}>🏆 Хамгийн ашигтай өдөр</div>
-                <div style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{bestDay[0]}</div>
-                <div style={{fontSize:"11px",color:"#0e9f6e",fontWeight:700}}>{fmtMNT(bestDay[1].profit)} · {bestDay[1].count} гүйлгээ</div>
+                <div style={{fontSize:"9px",fontWeight:700,color:"#0e9f6e",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"3px"}}>🗓 Өдөр</div>
+                <div style={{fontWeight:900,fontSize:"14px",color:"#0f172a"}}>{bestDay[0]}</div>
+                <div style={{fontSize:"11px",color:"#0e9f6e",fontWeight:700}}>{fmtMNT(bestDay[1].profit)}</div>
+                <div style={{fontSize:"10px",color:"#94a3b8"}}>{bestDay[1].count} гүйлгээ</div>
               </div>
             )}
-            {/* Хамгийн сайн сар */}
             {bestMon && (
               <div style={{background:"#eff6ff",borderRadius:"10px",padding:"10px 12px"}}>
-                <div style={{fontSize:"10px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"3px"}}>📅 Хамгийн ашигтай сар</div>
-                <div style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{bestMon[0]}</div>
-                <div style={{fontSize:"11px",color:"#1a56db",fontWeight:700}}>{fmtMNT(bestMon[1].profit)} · {bestMon[1].count} гүйлгээ</div>
+                <div style={{fontSize:"9px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"3px"}}>📅 Сар</div>
+                <div style={{fontWeight:900,fontSize:"14px",color:"#0f172a"}}>{bestMon[0]}</div>
+                <div style={{fontSize:"11px",color:"#1a56db",fontWeight:700}}>{fmtMNT(bestMon[1].profit)}</div>
+                <div style={{fontSize:"10px",color:"#94a3b8"}}>{bestMon[1].count} гүйлгээ</div>
               </div>
             )}
-            {/* Өдөр */}
-            <div>
-              <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>📆 Гарагаар</div>
-              <div style={{display:"flex",gap:"3px",alignItems:"flex-end",height:"48px"}}>
-                {Object.entries(dowMap).map(([dow,v])=>{
-                  const maxDow = Math.max(...Object.values(dowMap).map(d=>d.profit),1);
-                  const pct = Math.max((v.profit/maxDow)*100,4);
-                  const isTop = dow===bestDow?.[0];
-                  return (
-                    <div key={dow} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
-                      <div style={{width:"100%",background:isTop?"#1a56db":"#e2e8f0",borderRadius:"3px 3px 0 0",height:`${pct}%`,minHeight:"4px",transition:"height 0.3s"}}/>
-                      <div style={{fontSize:"9px",color:isTop?"#1a56db":"#94a3b8",fontWeight:isTop?700:400}}>{dowLabels[dow]}</div>
-                    </div>
-                  );
-                })}
-              </div>
-              {bestDow && <div style={{fontSize:"10px",color:"#64748b",marginTop:"4px"}}>
-                Идэвхтэй: <span style={{fontWeight:700,color:"#1a56db"}}>{dowLabels[bestDow[0]]}</span>
-                {worstDow && <> · Идэвхгүй: <span style={{fontWeight:700,color:"#94a3b8"}}>{dowLabels[worstDow[0]]}</span></>}
-              </div>}
+          </div>
+
+          {/* Гараг bar chart */}
+          <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"10px"}}>
+            <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:"8px"}}>📆 Гарагаар</div>
+            <div style={{display:"flex",gap:"4px",alignItems:"flex-end",height:"52px"}}>
+              {Object.entries(dowMap).map(([dow,v])=>{
+                const maxDow = Math.max(...Object.values(dowMap).map(d=>d.profit),1);
+                const pct = Math.max((v.profit/maxDow)*100,4);
+                const isTop = dow===bestDow?.[0];
+                const isWorst = dow===worstDow?.[0];
+                return (
+                  <div key={dow} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",height:"100%",justifyContent:"flex-end"}}>
+                    <div style={{width:"100%",background:isTop?"#0e9f6e":isWorst?"#fca5a5":"#e2e8f0",borderRadius:"3px 3px 0 0",height:`${pct}%`,minHeight:"3px"}}/>
+                    <div style={{fontSize:"9px",color:isTop?"#0e9f6e":isWorst?"#ef4444":"#94a3b8",fontWeight:isTop||isWorst?700:400}}>{dowLabels[dow]}</div>
+                  </div>
+                );
+              })}
             </div>
+            {bestDow && (
+              <div style={{display:"flex",gap:"6px",marginTop:"6px"}}>
+                <span style={{fontSize:"10px",background:"#f0fdf4",color:"#0e9f6e",borderRadius:"5px",padding:"2px 7px",fontWeight:700}}>↑ {dowLabels[bestDow[0]]}</span>
+                {worstDow && <span style={{fontSize:"10px",background:"#fff1f2",color:"#ef4444",borderRadius:"5px",padding:"2px 7px",fontWeight:700}}>↓ {dowLabels[worstDow[0]]}</span>}
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* ── ХУРДАН СТАТИСТИК ── */}
-      {(()=>{
-        const succ = rows.filter(r=>r.txStatus==="Амжилттай");
-        const tz8 = new Date(Date.now() + (new Date().getTimezoneOffset()+8*60)*60000);
-        const todayStr   = tz8.toISOString().slice(0,10);
-        const thisMonStr = todayStr.slice(0,7);
-        const monDay = (()=>{ const d=new Date(tz8); const day=d.getDay()||7; d.setDate(d.getDate()-day+1); return d.toISOString().slice(0,10); })();
-        const prevMonDay = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
-        const prevMonStr = (()=>{ const [y,m]=thisMonStr.split("-").map(Number); return `${m===1?y-1:y}-${String(m===1?12:m-1).padStart(2,"0")}`; })();
-        const prevWeekSun = (()=>{ const d=new Date(monDay); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
-
-        const todayRows  = succ.filter(r=>r.date?.slice(0,10)===todayStr);
-        const weekRows   = succ.filter(r=>r.date?.slice(0,10)>=monDay && r.date?.slice(0,10)<=todayStr);
-        const monRows    = succ.filter(r=>r.date?.startsWith(thisMonStr));
-        const prevWRows  = succ.filter(r=>r.date?.slice(0,10)>=prevMonDay && r.date?.slice(0,10)<=prevWeekSun);
-        const prevMRows  = succ.filter(r=>r.date?.startsWith(prevMonStr));
-
-        function pct(a,b) {
-          if (!b) return null;
-          const p = (a-b)/Math.abs(b)*100;
-          return <span style={{fontSize:"10px",fontWeight:700,padding:"1px 5px",borderRadius:"5px",background:p>=0?"#d1fae5":"#fee2e2",color:p>=0?"#065f46":"#991b1b",marginLeft:"6px"}}>{p>=0?"↑":"↓"}{Math.abs(p).toFixed(0)}%</span>;
-        }
-        function sum(arr, key) { return arr.reduce((s,r)=>s+(r[key]||0),0); }
-
-        const sections = [
-          { label:"Өнөөдөр",     color:"#7e3af2", rows:todayRows,  prevRows:null,     prevLabel:null },
-          { label:"Энэ 7 хоног", color:"#0e9f6e", rows:weekRows,   prevRows:prevWRows, prevLabel:"Өмнөх 7 хон" },
-          { label:"Энэ сар",     color:"#1a56db", rows:monRows,    prevRows:prevMRows, prevLabel:"Өмнөх сар" },
-        ];
-
-        return (
-          <div style={{...cardStyle, marginBottom:"16px"}}>
-            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Хурдан статистик</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"12px"}}>
-              {sections.map(({label,color,rows:r,prevRows:pr,prevLabel})=>(
-                <div key={label} style={{background:color+"11",borderRadius:"12px",padding:"12px 14px",borderTop:`3px solid ${color}`}}>
-                  <div style={{fontSize:"10px",fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"8px"}}>{label}</div>
-                  <div style={{marginBottom:"6px"}}>
-                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Ашиг</div>
-                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
-                      <span style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{fmtMNT(sum(r,"profitMNT"))}</span>
-                      {pr && pct(sum(r,"profitMNT"), sum(pr,"profitMNT"))}
-                    </div>
-                    {pr && <div style={{fontSize:"9px",color:"#cbd5e1"}}>{prevLabel}: {fmtMNT(sum(pr,"profitMNT"))}</div>}
-                  </div>
-                  <div style={{marginBottom:"6px"}}>
-                    <div style={{fontSize:"10px",color:"#94a3b8",marginBottom:"1px"}}>Нийт үнэ</div>
-                    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap"}}>
-                      <span style={{fontWeight:700,fontSize:"13px",color:"#0f172a"}}>{fmtMNT(sum(r,"totalPrice"))}</span>
-                      {pr && pct(sum(r,"totalPrice"), sum(pr,"totalPrice"))}
-                    </div>
-                  </div>
-                  <div style={{fontSize:"11px",color:"#64748b",borderTop:`1px dashed ${color}44`,paddingTop:"6px",marginTop:"4px"}}>
-                    {r.length} гүйлгээ
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ── ХАРИЛЦАГЧИЙН ШИНЖИЛГЭЭ (CRM) ── */}
       <div style={{...cardStyle,marginBottom:"20px"}}>
@@ -1255,6 +1278,7 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
+  const winW = useWindowWidth();
   const [tab, setTab]           = useState("dashboard");
   const [balances, setBalances] = useState(DEFAULT_BAL);
   const [transactions, setTx]   = useState([]);
@@ -1378,7 +1402,7 @@ export default function App() {
 
       {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй. Apps Script-г шинэчлэн deploy хийнэ үү.</div>}
 
-      <div style={{padding:"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto"}}>
+      <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto"}}>
         {tab==="dashboard" && groups.map(({currency,accs})=>(
           <div key={currency} style={{marginBottom:"24px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
