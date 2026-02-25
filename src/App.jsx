@@ -289,6 +289,22 @@ function AddDebtModal({ onClose, onSave }) {
 function DebtSection({ debts, onAdd, onToggle, onDelete }) {
   const pending = debts.filter(d=>d.status==="Хүлээгдэж буй");
   const paid    = debts.filter(d=>d.status==="Төлөгдсөн");
+
+  // Валютаар нийт авлага / зээл тооцоо (зөвхөн хүлээгдэж буй)
+  const CURRENCIES = ["MNT","RUB","USD"];
+  const CUR_SYM2 = { MNT:"₮", RUB:"₽", USD:"$" };
+  function sumByCur(type) {
+    const res = {};
+    pending.filter(d=>d.debtType===type).forEach(d=>{
+      const cur = d.currency==="USDT"?"USD":(d.currency||"MNT");
+      res[cur] = (res[cur]||0) + (Number(d.amount)||0);
+    });
+    return res;
+  }
+  const avlagaSums = sumByCur("Авлага");
+  const zeelSums   = sumByCur("Зээл");
+  const hasAvlaga  = Object.values(avlagaSums).some(v=>v>0);
+  const hasZeel    = Object.values(zeelSums).some(v=>v>0);
   function Card({d}) {
     return (
       <div style={{background:"#fff",borderRadius:"12px",padding:"13px 14px",border:"1px solid #e8edf5",borderLeft:`4px solid ${d.debtType==="Авлага"?"#1a56db":"#f59e0b"}`}}>
@@ -314,6 +330,47 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
         <h2 style={{margin:0,fontSize:"16px",fontWeight:800,color:"#0f172a"}}>Авлага / Зээл</h2>
         <Btn onClick={onAdd}>+ Нэмэх</Btn>
+      </div>
+
+      {/* ── НИЙТ АВЛАГА + ЗЭЭЛ — хамгийн дээр, валютаар ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"20px"}}>
+        {/* Нийт авлага */}
+        <div style={{background:"#eff6ff",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #1a56db"}}>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📥 Нийт авлага</div>
+          {hasAvlaga
+            ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                {CURRENCIES.filter(c=>avlagaSums[c]>0).map(c=>(
+                  <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:"12px",fontWeight:700,color:"#64748b",background:"#dbeafe",borderRadius:"5px",padding:"2px 8px"}}>{CUR_SYM2[c]}</span>
+                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(avlagaSums[c]).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
+          }
+          <div style={{fontSize:"10px",color:"#93c5fd",marginTop:"10px",borderTop:"1px solid #dbeafe",paddingTop:"8px"}}>
+            {pending.filter(d=>d.debtType==="Авлага").length} хүлээгдэж буй бүртгэл
+          </div>
+        </div>
+
+        {/* Нийт зээл */}
+        <div style={{background:"#fffbeb",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #f59e0b"}}>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📤 Нийт зээл</div>
+          {hasZeel
+            ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                {CURRENCIES.filter(c=>zeelSums[c]>0).map(c=>(
+                  <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:"12px",fontWeight:700,color:"#92400e",background:"#fde68a",borderRadius:"5px",padding:"2px 8px"}}>{CUR_SYM2[c]}</span>
+                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(zeelSums[c]).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
+          }
+          <div style={{fontSize:"10px",color:"#fcd34d",marginTop:"10px",borderTop:"1px solid #fde68a",paddingTop:"8px"}}>
+            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй бүртгэл
+          </div>
+        </div>
       </div>
       {debts.length===0
         ? <div style={{textAlign:"center",padding:"32px",color:"#94a3b8",background:"#f8fafc",borderRadius:"12px",fontSize:"14px"}}>Бүртгэл байхгүй байна</div>
@@ -784,7 +841,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         ];
         return (
           <div style={{background:"#fff",borderRadius:"14px",padding:"16px 20px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",marginBottom:"16px"}}>
-            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Хурдан статистик</div>
+            <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Товч статистик</div>
             <div style={{display:"grid",gridTemplateColumns:cols3,gap:"12px"}}>
               {sections.map(({label,color,rows:r,prevRows:pr,prevLabel})=>(
                 <div key={label} style={{background:color+"11",borderRadius:"12px",padding:"12px 14px",borderTop:`3px solid ${color}`}}>
@@ -1339,7 +1396,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
