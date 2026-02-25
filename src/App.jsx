@@ -11,17 +11,18 @@ function useWindowWidth() {
   return w;
 }
 
-const ACCOUNTS = [
+const DEFAULT_ACCOUNTS = [
   { id: "khan_oyun",  name: "Хаан банк Оюун-Эрдэнэ", type: "personal", currency: "MNT", color: "#1a56db" },
   { id: "khan_tolya", name: "Хаан банк Толя",          type: "personal", currency: "MNT", color: "#0e9f6e" },
   { id: "als_tod",    name: "Алс Тод ББСБ",             type: "org",      currency: "MNT", color: "#f59e0b" },
   { id: "oyuns_rub",  name: "OYUNS",                    type: "org",      currency: "RUB", color: "#7e3af2" },
   { id: "oyuns_usdt", name: "OYUNS",                    type: "org",      currency: "USDT",color: "#06b6d4" },
 ];
+const CUR_COLORS = ["#1a56db","#0e9f6e","#f59e0b","#7e3af2","#06b6d4","#ef4444","#ec4899","#84cc16"];
 const CUR_FLAG  = { MNT:"🇲🇳", RUB:"🇷🇺", USDT:"💵" };
 const CUR_LABEL = { MNT:"Төгрөгийн данс", RUB:"Рублийн данс", USDT:"USDT данс" };
 const CUR_SYM   = { MNT:"₮", RUB:"₽", USDT:"USDT" };
-const DEFAULT_BAL = Object.fromEntries(ACCOUNTS.map(a => [a.id, 0]));
+const DEFAULT_BAL = Object.fromEntries(DEFAULT_ACCOUNTS.map(a => [a.id, 0]));
 const today = () => new Date().toISOString().slice(0, 10);
 
 const RATE_PAIRS = [
@@ -228,7 +229,54 @@ function EditBalModal({ acc, bal, onClose, onSave }) {
   );
 }
 
-function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx }) {
+// ── Данс нэмэх Modal ──
+function AddAccountModal({ onClose, onSave }) {
+  const [name, setName]   = useState("");
+  const [cur, setCur]     = useState("MNT");
+  const [type, setType]   = useState("personal");
+  const colorOpts = ["#1a56db","#0e9f6e","#f59e0b","#7e3af2","#06b6d4","#ef4444","#ec4899","#84cc16"];
+  const [color, setColor] = useState("#1a56db");
+  const inp = {width:"100%",padding:"10px 12px",border:"1px solid #e2e8f0",borderRadius:"10px",fontSize:"14px",fontFamily:"inherit",boxSizing:"border-box",outline:"none"};
+
+  return (
+    <Modal title="Данс нэмэх" onClose={onClose}>
+      <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+        <Field label="Дансны нэр">
+          <input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="Хаан банк, Голомт..."/>
+        </Field>
+        <Field label="Валют">
+          <div style={{display:"flex",gap:"8px"}}>
+            {["MNT","RUB","USDT"].map(c=>(
+              <button key={c} onClick={()=>setCur(c)} style={{flex:1,padding:"10px",border:`2px solid ${cur===c?"#1a56db":"#e2e8f0"}`,borderRadius:"10px",background:cur===c?"#dbeafe":"#f8fafc",color:cur===c?"#1e40af":"#64748b",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                {c==="MNT"?"₮ MNT":c==="RUB"?"₽ RUB":"💵 USDT"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Төрөл">
+          <div style={{display:"flex",gap:"8px"}}>
+            {[["personal","Хувь"],["org","Байгууллага"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setType(v)} style={{flex:1,padding:"10px",border:`2px solid ${type===v?"#1a56db":"#e2e8f0"}`,borderRadius:"10px",background:type===v?"#dbeafe":"#f8fafc",color:type===v?"#1e40af":"#64748b",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Өнгө">
+          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+            {colorOpts.map(c=>(
+              <div key={c} onClick={()=>setColor(c)} style={{width:"28px",height:"28px",borderRadius:"50%",background:c,cursor:"pointer",border:color===c?"3px solid #0f172a":"3px solid transparent",boxSizing:"border-box"}}/>
+            ))}
+          </div>
+        </Field>
+        <button disabled={!name.trim()} onClick={()=>onSave({id:"acc_"+Date.now(),name:name.trim(),currency:cur,type,color})}
+          style={{padding:"13px",background:name.trim()?"#1a56db":"#e2e8f0",color:name.trim()?"#fff":"#94a3b8",border:"none",borderRadius:"12px",fontWeight:800,fontSize:"15px",cursor:name.trim()?"pointer":"default",fontFamily:"inherit"}}>
+          Нэмэх
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx, onDelete }) {
   return (
     <div style={{background:"#fff",borderRadius:"16px",padding:"18px 18px 14px",boxShadow:"0 2px 10px rgba(0,0,0,0.06)",border:"1px solid #e8edf5",borderLeft:`5px solid ${acc.color}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
@@ -236,7 +284,10 @@ function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx }) {
           <div style={{fontSize:"10px",fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"3px"}}>{acc.type==="personal"?"Хувь данс":"Байгууллагын данс"}</div>
           <div style={{fontWeight:800,fontSize:"15px",color:"#0f172a"}}>{acc.name}</div>
         </div>
-        <button onClick={()=>onEdit(acc.id)} style={{background:"#f1f5f9",border:"none",borderRadius:"8px",padding:"6px 9px",cursor:"pointer",fontSize:"14px",color:"#64748b"}}>✏️</button>
+        <div style={{display:"flex",gap:"6px"}}>
+          <button onClick={()=>onEdit(acc.id)} style={{background:"#f1f5f9",border:"none",borderRadius:"8px",padding:"6px 9px",cursor:"pointer",fontSize:"14px",color:"#64748b"}}>✏️</button>
+          {onDelete && <button onClick={()=>onDelete(acc.id)} style={{background:"#fee2e2",border:"none",borderRadius:"8px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#991b1b"}}>🗑</button>}
+        </div>
       </div>
       <div style={{background:acc.color+"11",borderRadius:"12px",padding:"14px 16px",marginBottom:"12px",textAlign:"center"}}>
         <div style={{fontSize:"11px",fontWeight:700,color:acc.color,marginBottom:"4px",letterSpacing:"0.06em"}}>ҮЛДЭГДЭЛ</div>
@@ -368,7 +419,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#fcd34d",marginTop:"10px",borderTop:"1px solid #fde68a",paddingTop:"8px"}}>
-            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй 
+            {pending.filter(d=>d.debtType==="Зээл").length} хүлээгдэж буй
           </div>
         </div>
       </div>
@@ -1295,6 +1346,10 @@ export default function App() {
 
   const winW = useWindowWidth();
   const [tab, setTab]           = useState("dashboard");
+  const [accounts, setAccounts] = useState(() => {
+    try { const s=localStorage.getItem("oyuns_accounts"); if(s) return JSON.parse(s); } catch(e){}
+    return DEFAULT_ACCOUNTS;
+  });
   const [balances, setBalances] = useState(DEFAULT_BAL);
   const [transactions, setTx]   = useState([]);
   const [debts, setDebts]       = useState([]);
@@ -1304,6 +1359,7 @@ export default function App() {
   const [viewTxFor, setViewTxFor]   = useState(null);
   const [editBalFor, setEditBalFor] = useState(null);
   const [showDebt, setShowDebt]     = useState(false);
+  const [showAddAcc, setShowAddAcc] = useState(false);
   const [financeRows, setFinanceRows] = useState(() => {
     // Хуудас нээхэд кэшнээс шууд ачаална → loading үзэгдэхгүй
     try {
@@ -1330,6 +1386,10 @@ export default function App() {
       try {
         const data = await apiGet({ action:"getAll" }, false);
         if (data.ok) {
+          if (data.accounts) {
+            setAccounts(data.accounts);
+            localStorage.setItem("oyuns_accounts", JSON.stringify(data.accounts));
+          }
           setBalances(data.balances || DEFAULT_BAL);
           setTx(data.transactions || []);
           setDebts(data.debts || []);
@@ -1391,9 +1451,9 @@ export default function App() {
   }
 
   const groups = [
-    {currency:"MNT", accs:ACCOUNTS.filter(a=>a.currency==="MNT")},
-    {currency:"RUB", accs:ACCOUNTS.filter(a=>a.currency==="RUB")},
-    {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
+    {currency:"MNT", accs:accounts.filter(a=>a.currency==="MNT")},
+    {currency:"RUB", accs:accounts.filter(a=>a.currency==="RUB")},
+    {currency:"USDT",accs:accounts.filter(a=>a.currency==="USDT")},
   ];
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
@@ -1418,17 +1478,50 @@ export default function App() {
       {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй. Apps Script-г шинэчлэн deploy хийнэ үү.</div>}
 
       <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto"}}>
-        {tab==="dashboard" && groups.map(({currency,accs})=>(
-          <div key={currency} style={{marginBottom:"24px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
-              <span style={{fontSize:"15px"}}>{CUR_FLAG[currency]}</span>
-              <span style={{fontSize:"12px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.07em"}}>{CUR_LABEL[currency]} ({currency})</span>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-              {accs.map(acc=><BalanceCard key={acc.id} acc={acc} bal={balances[acc.id]||0} onEdit={setEditBalFor} onViewTx={setViewTxFor} onAddTx={setAddTxFor}/>)}
+        {tab==="dashboard" && (<>
+          {/* ── НИЙТ НИЙЛБЭР ── */}
+          <div style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"16px",padding:"16px 18px",marginBottom:"20px",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
+            <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"12px"}}>💰 Нийт үлдэгдэл</div>
+            <div style={{display:"flex",gap:"16px",flexWrap:"wrap"}}>
+              {["MNT","RUB","USDT"].map(cur=>{
+                const total = accounts.filter(a=>a.currency===cur).reduce((s,a)=>s+(balances[a.id]||0),0);
+                if(accounts.filter(a=>a.currency===cur).length===0) return null;
+                return (
+                  <div key={cur} style={{flex:"1 1 100px"}}>
+                    <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",marginBottom:"3px"}}>{CUR_FLAG[cur]} {cur}</div>
+                    <div style={{fontWeight:900,fontSize:"22px",color:total>=0?"#fff":"#fca5a5",lineHeight:1}}>{fmt(total,cur)}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ))}
+
+          {/* ── ДАНСУУД ── */}
+          {groups.map(({currency,accs})=>accs.length===0?null:(
+            <div key={currency} style={{marginBottom:"24px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"7px"}}>
+                  <span style={{fontSize:"15px"}}>{CUR_FLAG[currency]}</span>
+                  <span style={{fontSize:"12px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.07em"}}>{CUR_LABEL[currency]}</span>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+                {accs.map(acc=><BalanceCard key={acc.id} acc={acc} bal={balances[acc.id]||0} onEdit={setEditBalFor} onViewTx={setViewTxFor} onAddTx={setAddTxFor} onDelete={async(id)=>{
+                  if(!window.confirm("Данс устгах уу?")) return;
+                  const newAccs=accounts.filter(a=>a.id!==id);
+                  setAccounts(newAccs);
+                  localStorage.setItem("oyuns_accounts",JSON.stringify(newAccs));
+                  await apiPost({action:"saveAccounts",accounts:newAccs});
+                }}/>)}
+              </div>
+            </div>
+          ))}
+
+          {/* Данс нэмэх товч */}
+          <button onClick={()=>setShowAddAcc(true)} style={{width:"100%",padding:"14px",background:"#fff",border:"2px dashed #cbd5e1",borderRadius:"14px",cursor:"pointer",fontSize:"14px",fontWeight:700,color:"#64748b",fontFamily:"inherit",marginBottom:"16px"}}>
+            + Шинэ данс нэмэх
+          </button>
+        </>)}
 
 
         {tab==="finance" && <FinanceDashboard rows={financeRows} loading={financeLoading} search={financeSearch} setSearch={setFinanceSearch} status={financeStatus} setStatus={setFinanceStatus} month={financeMonth} setMonth={setFinanceMonth} period={financePeriod} setPeriod={setFinancePeriod} onRefresh={loadFinance} lastLoaded={lastLoaded}/>}
@@ -1447,10 +1540,21 @@ export default function App() {
         )}
       </div>
 
-      {addTxFor  && <AddTxModal acc={ACCOUNTS.find(a=>a.id===addTxFor)} onClose={()=>setAddTxFor(null)} onSave={handleSaveTx}/>}
-      {viewTxFor && <TxHistoryModal acc={ACCOUNTS.find(a=>a.id===viewTxFor)} transactions={transactions} onClose={()=>setViewTxFor(null)} onDelete={handleDeleteTx}/>}
-      {editBalFor && <EditBalModal acc={ACCOUNTS.find(a=>a.id===editBalFor)} bal={balances[editBalFor]||0} onClose={()=>setEditBalFor(null)} onSave={async(id,v)=>{setBalances(prev=>({...prev,[id]:v}));await apiPost({action:"setBalance",accountId:id,value:v});}}/>}
+      {addTxFor  && <AddTxModal acc={accounts.find(a=>a.id===addTxFor)} onClose={()=>setAddTxFor(null)} onSave={handleSaveTx}/>}
+      {viewTxFor && <TxHistoryModal acc={accounts.find(a=>a.id===viewTxFor)} transactions={transactions} onClose={()=>setViewTxFor(null)} onDelete={handleDeleteTx}/>}
+      {editBalFor && <EditBalModal acc={accounts.find(a=>a.id===editBalFor)} bal={balances[editBalFor]||0} onClose={()=>setEditBalFor(null)} onSave={async(id,v)=>{
+        setBalances(prev=>({...prev,[id]:v}));
+        await apiPost({action:"setBalance",accountId:id,value:v});
+      }}/>}
       {showDebt && <AddDebtModal onClose={()=>setShowDebt(false)} onSave={async d=>{setDebts(prev=>[...prev,d]);await apiPost({action:"addDebt",data:d});}}/>}
+      {showAddAcc && <AddAccountModal onClose={()=>setShowAddAcc(false)} onSave={async(acc)=>{
+        const newAccs=[...accounts,acc];
+        setAccounts(newAccs);
+        setBalances(prev=>({...prev,[acc.id]:0}));
+        localStorage.setItem("oyuns_accounts",JSON.stringify(newAccs));
+        await apiPost({action:"saveAccounts",accounts:newAccs});
+        setShowAddAcc(false);
+      }}/>}
     </div>
   );
 }
