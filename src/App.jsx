@@ -625,9 +625,40 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     }
   }
   const graphData = buildGraphData();
-  // Өдрийн graph-д хуваагч шугам (өмнөх 7 хоног vs тухайн)
   const graphDivider = (period==="долоо хоног" && month!=="Бүгд") ? 7 : null;
   const maxProfit = Math.max(...graphData.map(([,v])=>Math.abs(v.profitMNT)),1);
+
+  // ── Хамгийн идэвхтэй өдөр/сар ──
+  const allSucc = rows.filter(r=>r.txStatus==="Амжилттай");
+  // Өдрөөр задлах
+  const dayMap = {};
+  allSucc.forEach(r=>{
+    const d = r.date?.slice(0,10); if(!d) return;
+    if(!dayMap[d]) dayMap[d]={profit:0,count:0};
+    dayMap[d].profit += r.profitMNT||0;
+    dayMap[d].count++;
+  });
+  // Сараар задлах
+  const monMap = {};
+  allSucc.forEach(r=>{
+    const m = r.date?.slice(0,7); if(!m) return;
+    if(!monMap[m]) monMap[m]={profit:0,count:0};
+    monMap[m].profit += r.profitMNT||0;
+    monMap[m].count++;
+  });
+  // Гарагаар задлах (0=Ням..6=Бямба)
+  const dowLabels = ["Ням","Дав","Мяг","Лха","Пүр","Баа","Бям"];
+  const dowMap = {0:{profit:0,count:0},1:{profit:0,count:0},2:{profit:0,count:0},3:{profit:0,count:0},4:{profit:0,count:0},5:{profit:0,count:0},6:{profit:0,count:0}};
+  allSucc.forEach(r=>{
+    const d = r.date?.slice(0,10); if(!d) return;
+    const dow = new Date(d).getDay();
+    dowMap[dow].profit += r.profitMNT||0;
+    dowMap[dow].count++;
+  });
+  const bestDay  = Object.entries(dayMap).sort((a,b)=>b[1].profit-a[1].profit)[0];
+  const bestMon  = Object.entries(monMap).sort((a,b)=>b[1].profit-a[1].profit)[0];
+  const bestDow  = Object.entries(dowMap).sort((a,b)=>b[1].profit-a[1].profit)[0];
+  const worstDow = Object.entries(dowMap).filter(([,v])=>v.count>0).sort((a,b)=>a[1].profit-b[1].profit)[0];
 
   // ── TOP COUNTERPARTIES ──
   // cpMapAll: БҮГД амжилттай гүйлгээнээс recency/cold тооцно (filter хамаарахгүй)
@@ -699,7 +730,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
     </th>;
   }
 
-  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачааллаж байна...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Ачаалж байна...</div>;
   if (!rows.length) return <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px"}}>Өгөгдөл олдсонгүй</div>;
 
   const pageRows = sorted.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -809,7 +840,7 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
         </div>
         <button onClick={()=>onRefresh(true)} disabled={loading}
           style={{padding:"10px 16px",borderRadius:"10px",border:"none",cursor:loading?"default":"pointer",fontSize:"12px",fontWeight:700,fontFamily:"inherit",background:loading?"#e2e8f0":"#1a56db",color:loading?"#94a3b8":"#fff",whiteSpace:"nowrap",transition:"all 0.2s",display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}>
-          <span>{loading?"⏳ Ачааллаж...":"🔄 Шинэчлэх"}</span>
+          <span>{loading?"⏳ Ачаалж...":"🔄 Шинэчлэх"}</span>
           {lastLoaded && !loading && <span style={{fontSize:"9px",opacity:0.7}}>{String(lastLoaded.getHours()).padStart(2,"0")}:{String(lastLoaded.getMinutes()).padStart(2,"0")}</span>}
         </button>
       </div>
@@ -878,11 +909,11 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
       </div>
 
       {/* ── CHARTS ROW ── */}
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"16px",marginBottom:"20px",alignItems:"start"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"16px",marginBottom:"16px",alignItems:"start"}}>
 
         {/* PROFIT CHART */}
-        <div style={cardStyle}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
+        <div style={{...cardStyle,gridColumn:"1 / -1"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}}>
             <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>📊 Ашгийн график</div>
             <div style={{display:"flex",gap:"4px"}}>
               {["өдөр","долоо хоног","сар"].map(p=>(
@@ -913,6 +944,50 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
             )) : <div style={{color:"#94a3b8",fontSize:"13px"}}>Ангилал байхгүй</div>}
           </div>
         </div>
+
+        {/* ИДЭВХТЭЙ ЦАГ */}
+        <div style={cardStyle}>
+          <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a",marginBottom:"14px"}}>⚡ Идэвхтэй цаг</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+            {/* Хамгийн сайн өдөр */}
+            {bestDay && (
+              <div style={{background:"#f0fdf4",borderRadius:"10px",padding:"10px 12px"}}>
+                <div style={{fontSize:"10px",fontWeight:700,color:"#0e9f6e",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"3px"}}>🏆 Хамгийн ашигтай өдөр</div>
+                <div style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{bestDay[0]}</div>
+                <div style={{fontSize:"11px",color:"#0e9f6e",fontWeight:700}}>{fmtMNT(bestDay[1].profit)} · {bestDay[1].count} гүйлгээ</div>
+              </div>
+            )}
+            {/* Хамгийн сайн сар */}
+            {bestMon && (
+              <div style={{background:"#eff6ff",borderRadius:"10px",padding:"10px 12px"}}>
+                <div style={{fontSize:"10px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"3px"}}>📅 Хамгийн ашигтай сар</div>
+                <div style={{fontWeight:900,fontSize:"15px",color:"#0f172a"}}>{bestMon[0]}</div>
+                <div style={{fontSize:"11px",color:"#1a56db",fontWeight:700}}>{fmtMNT(bestMon[1].profit)} · {bestMon[1].count} гүйлгээ</div>
+              </div>
+            )}
+            {/* Гарагаар */}
+            <div>
+              <div style={{fontSize:"10px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>📆 Гарагаар</div>
+              <div style={{display:"flex",gap:"3px",alignItems:"flex-end",height:"48px"}}>
+                {Object.entries(dowMap).map(([dow,v])=>{
+                  const maxDow = Math.max(...Object.values(dowMap).map(d=>d.profit),1);
+                  const pct = Math.max((v.profit/maxDow)*100,4);
+                  const isTop = dow===bestDow?.[0];
+                  return (
+                    <div key={dow} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                      <div style={{width:"100%",background:isTop?"#1a56db":"#e2e8f0",borderRadius:"3px 3px 0 0",height:`${pct}%`,minHeight:"4px",transition:"height 0.3s"}}/>
+                      <div style={{fontSize:"9px",color:isTop?"#1a56db":"#94a3b8",fontWeight:isTop?700:400}}>{dowLabels[dow]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {bestDow && <div style={{fontSize:"10px",color:"#64748b",marginTop:"4px"}}>
+                Идэвхтэй: <span style={{fontWeight:700,color:"#1a56db"}}>{dowLabels[bestDow[0]]}</span>
+                {worstDow && <> · Тайван: <span style={{fontWeight:700,color:"#94a3b8"}}>{dowLabels[worstDow[0]]}</span></>}
+              </div>}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── ХАРИЛЦАГЧИЙН ШИНЖИЛГЭЭ (CRM) ── */}
@@ -921,8 +996,8 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>👥 Харилцагчийн шинжилгээ</div>
           <div style={{fontSize:"11px",color:"#94a3b8"}}>{Object.keys(cpMap).length} харилцагч</div>
         </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"700px"}}>
             <thead>
               <tr style={{background:"#f8fafc"}}>
                 <th style={{padding:"8px 10px",textAlign:"left",fontWeight:700,color:"#64748b",borderBottom:"2px solid #e2e8f0",fontSize:"11px"}}>#</th>
@@ -1044,8 +1119,8 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
           <div style={{fontWeight:800,fontSize:"14px",color:"#0f172a"}}>📋 Гүйлгээний дэлгэрэнгүй</div>
           <div style={{fontSize:"12px",color:"#94a3b8"}}>{sorted.length} нийт · {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,sorted.length)}</div>
         </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"700px"}}>
             <thead>
               <tr style={{background:"#f8fafc"}}>
                 <SortTh col="date"         label="Огноо"/>
@@ -1220,7 +1295,7 @@ export default function App() {
     {currency:"USDT",accs:ACCOUNTS.filter(a=>a.currency==="USDT")},
   ];
 
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>;
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачаалж байна...</div>;
 
   return (
     <div style={{fontFamily:"'Montserrat',sans-serif",background:"#f0f4f8",minHeight:"100vh"}}>
@@ -1241,7 +1316,7 @@ export default function App() {
 
       {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй. Apps Script-г шинэчлэн deploy хийнэ үү.</div>}
 
-      <div style={{padding:"16px",maxWidth:tab==="finance"?"1100px":"560px",margin:"0 auto"}}>
+      <div style={{padding:"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto"}}>
         {tab==="dashboard" && groups.map(({currency,accs})=>(
           <div key={currency} style={{marginBottom:"24px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
