@@ -179,8 +179,11 @@ function AlsTodHuulgaModal({ onClose }) {
     return Number(n).toLocaleString("mn-MN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
-  const balNum   = Number(balance) || 0;
+  const balNum   = Math.round(Number(balance) || 0);
   const balColor = balNum >= 0 ? "#4ade80" : "#fca5a5";
+  function fmtBal(n) {
+    return Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",backdropFilter:"blur(5px)"}}>
@@ -197,7 +200,7 @@ function AlsTodHuulgaModal({ onClose }) {
               <div style={{background:"rgba(255,255,255,0.13)",borderRadius:"14px",padding:"10px 18px",textAlign:"right",backdropFilter:"blur(8px)"}}>
                 <div style={{fontSize:"10px",color:"rgba(255,255,255,0.55)",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"3px"}}>Одоогийн үлдэгдэл</div>
                 <div style={{fontSize:"20px",fontWeight:900,color:balColor,letterSpacing:"0.01em"}}>
-                  {balNum < 0 ? "-" : ""}₮{Math.abs(balNum).toLocaleString("mn-MN")}
+                  {balNum < 0 ? "-" : ""}₮{fmtBal(balNum)}
                 </div>
               </div>
             )}
@@ -317,7 +320,7 @@ function AlsTodHuulgaModal({ onClose }) {
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
               <span style={{fontSize:"12px",color:"#64748b",fontWeight:600}}>Одоогийн үлдэгдэл:</span>
               <span style={{fontSize:"15px",fontWeight:900,color:balNum >= 0 ? "#0e9f6e" : "#ef4444"}}>
-                {balNum < 0 ? "-" : ""}₮{Math.abs(balNum).toLocaleString("mn-MN")}
+                {balNum < 0 ? "-" : ""}₮{fmtBal(balNum)}
               </span>
             </div>
           </div>
@@ -1506,12 +1509,25 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
+        // 1. Үндсэн өгөгдөл ачаална
         const data = await apiGet({ action:"getAll" }, false);
         if (data.ok) {
           if (data.accounts) { setAccounts(data.accounts); localStorage.setItem("oyuns_accounts",JSON.stringify(data.accounts)); }
-          setBalances(data.balances || DEFAULT_BAL);
+          const loadedBal = data.balances || DEFAULT_BAL;
           setTx(data.transactions || []);
           setDebts(data.debts || []);
+
+          // 2. АлсТод ББСБ үлдэгдлийг М column-ийн сүүлийн утгаас автоматаар авна
+          try {
+            const alsTodData = await apiGet({ action:"getAlsTodHuulga" }, false);
+            if (alsTodData.ok && alsTodData.balance !== undefined && alsTodData.balance !== null && alsTodData.balance !== 0) {
+              loadedBal["als_tod"] = Math.round(Number(alsTodData.balance));
+            }
+          } catch(e2) {
+            console.warn("АлсТод үлдэгдэл ачаалах алдаа:", e2);
+          }
+
+          setBalances(loadedBal);
         }
       } catch(e) { setError(true); }
       setLoading(false);
