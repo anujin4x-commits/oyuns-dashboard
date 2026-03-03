@@ -972,6 +972,26 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
   );
 }
 
+function LiveClock() {
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  const ss = String(now.getSeconds()).padStart(2,"0");
+  const yy = now.getFullYear();
+  const mo = String(now.getMonth()+1).padStart(2,"0");
+  const dd = String(now.getDate()).padStart(2,"0");
+  return (
+    <div style={{textAlign:"right",lineHeight:1.2}}>
+      <div style={{fontSize:"18px",fontWeight:900,color:"#fff",letterSpacing:"0.05em"}}>{hh}:{mm}:{ss}</div>
+      <div style={{fontSize:"10px",color:"rgba(255,255,255,0.6)",fontWeight:600}}>{yy}.{mo}.{dd}</div>
+    </div>
+  );
+}
+
 function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus, month, setMonth, period, setPeriod, onRefresh, lastLoaded }) {
   const winW = useWindowWidth();
   const isMobile = winW < 640;
