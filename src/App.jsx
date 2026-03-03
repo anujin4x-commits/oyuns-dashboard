@@ -50,14 +50,21 @@ const today = () => new Date().toISOString().slice(0, 10);
 function fmtDateDisplay(val) {
   if (!val) return "";
   try {
-    const d = new Date(val);
-    if (isNaN(d)) return String(val);
-    const yy = d.getFullYear();
-    const mo = String(d.getMonth()+1).padStart(2,"0");
-    const dd = String(d.getDate()).padStart(2,"0");
-    if (String(val).includes("T") || String(val).includes(" ")) {
-      const hh = String(d.getHours()).padStart(2,"0");
-      const mm = String(d.getMinutes()).padStart(2,"0");
+    const s = String(val);
+    // Plain date "2026-03-01" -> local задлалт
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) {
+      const [yy, mo, dd] = s.trim().split("-");
+      return yy+"/"+mo+"/"+dd;
+    }
+    // ISO timestamp -> UTC-аар задлана (timezone зөрүүгүй)
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const yy = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth()+1).padStart(2,"0");
+    const dd = String(d.getUTCDate()).padStart(2,"0");
+    if (s.includes("T") || s.includes(" ")) {
+      const hh = String(d.getUTCHours()).padStart(2,"0");
+      const mm = String(d.getUTCMinutes()).padStart(2,"0");
       return yy+"/"+mo+"/"+dd+" "+hh+":"+mm;
     }
     return yy+"/"+mo+"/"+dd;
