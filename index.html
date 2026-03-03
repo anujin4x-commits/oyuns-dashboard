@@ -2,9 +2,36 @@
 <html lang="mn">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OYUNS — Санхүүгийн бүртгэл</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💼</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>OYUNS Finance</title>
+
+    <!-- ✅ Telegram Mini App SDK — ЗААВАЛ эхэлж ачаалах ёстой -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+      * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Montserrat', sans-serif;
+        background: #f0f4f8;
+        /* Telegram safe area */
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      #root {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+      /* iOS scroll fix */
+      html {
+        height: -webkit-fill-available;
+        overflow-x: hidden;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
