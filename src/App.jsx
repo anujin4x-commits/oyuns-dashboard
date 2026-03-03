@@ -50,21 +50,14 @@ const today = () => new Date().toISOString().slice(0, 10);
 function fmtDateDisplay(val) {
   if (!val) return "";
   try {
-    const s = String(val);
-    // Plain date "2026-03-01" -> local задлалт
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) {
-      const [yy, mo, dd] = s.trim().split("-");
-      return yy+"/"+mo+"/"+dd;
-    }
-    // ISO timestamp -> UTC-аар задлана (timezone зөрүүгүй)
-    const d = new Date(s);
-    if (isNaN(d)) return s;
-    const yy = d.getUTCFullYear();
-    const mo = String(d.getUTCMonth()+1).padStart(2,"0");
-    const dd = String(d.getUTCDate()).padStart(2,"0");
-    if (s.includes("T") || s.includes(" ")) {
-      const hh = String(d.getUTCHours()).padStart(2,"0");
-      const mm = String(d.getUTCMinutes()).padStart(2,"0");
+    const d = new Date(val);
+    if (isNaN(d)) return String(val);
+    const yy = d.getFullYear();
+    const mo = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    if (String(val).includes("T") || String(val).includes(" ")) {
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mm = String(d.getMinutes()).padStart(2,"0");
       return yy+"/"+mo+"/"+dd+" "+hh+":"+mm;
     }
     return yy+"/"+mo+"/"+dd;
@@ -93,38 +86,80 @@ function fmt(n, cur) {
 const SCRIPT_URL = "https://oyuns-dashboard.anujin4x.workers.dev";
 const CACHE_TTL  = 5 * 60 * 1000;
 
+// ── In-memory cache (localStorage-аас илүү найдвартай, Telegram-д ажилладаг) ──
+const _cache = {};
+
 async function apiGet(params, forceRefresh = false) {
   const key = "oyuns_" + new URLSearchParams(params).toString();
+  if (!forceRefresh && _cache[key]) {
+    const { ts, data } = _cache[key];
+    if (Date.now() - ts < CACHE_TTL) return data;
+  }
+  // localStorage fallback (browser орчинд)
   if (!forceRefresh) {
     try {
       const c = localStorage.getItem(key);
       if (c) {
         const { ts, data } = JSON.parse(c);
-        if (Date.now() - ts < CACHE_TTL) return data;
+        if (Date.now() - ts < CACHE_TTL) {
+          _cache[key] = { ts, data };
+          return data;
+        }
       }
     } catch(e) {}
   }
-  const url = SCRIPT_URL + "?" + new URLSearchParams(params);
+  const url  = SCRIPT_URL + "?" + new URLSearchParams(params);
   const res  = await fetch(url, { redirect:"follow", credentials:"omit" });
   const data = await res.json();
+  _cache[key] = { ts: Date.now(), data };
   try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
   return data;
 }
 
 function clearApiCache() {
-  Object.keys(localStorage).filter(k => k.startsWith("oyuns_")).forEach(k => localStorage.removeItem(k));
+  Object.keys(_cache).forEach(k => delete _cache[k]);
+  try { Object.keys(localStorage).filter(k => k.startsWith("oyuns_")).forEach(k => localStorage.removeItem(k)); } catch(e) {}
 }
 
 async function apiPost(body) {
-  try {
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      credentials: "omit",
-      body: JSON.stringify(body),
-    });
-  } catch(e) {}
-  return { ok: true };
+  // Telegram болон browser хоёуланд ажилладаг - cors mode + retry
+  const MAX_RETRY = 3;
+  for (let i = 0; i < MAX_RETRY; i++) {
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        mode: "cors",
+        credentials: "omit",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(body),
+        redirect: "follow",
+      });
+      if (res.ok || res.status === 0) {
+        // Холбогдох cache устгана (шинэ өгөгдөл авах)
+        const action = body.action || "";
+        if (action.includes("Transaction") || action.includes("Balance") || action === "setBalance") {
+          delete _cache["oyuns_action=getAll"];
+          try { localStorage.removeItem("oyuns_action=getAll"); } catch(e) {}
+        }
+        if (action.includes("Debt")) {
+          delete _cache["oyuns_action=getAll"];
+          try { localStorage.removeItem("oyuns_action=getAll"); } catch(e) {}
+        }
+        if (action === "saveAccounts") {
+          delete _cache["oyuns_action=getAll"];
+          try { localStorage.removeItem("oyuns_action=getAll"); } catch(e) {}
+        }
+        return { ok: true };
+      }
+    } catch(e) {
+      if (i === MAX_RETRY - 1) {
+        console.error("apiPost failed after retries:", e);
+        return { ok: false, error: String(e) };
+      }
+      await new Promise(r => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  return { ok: false };
 }
 
 // ── UI helpers ──────────────────────────────────────
@@ -859,27 +894,6 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
             )}
           </>
       }
-    </div>
-  );
-}
-
-// ── Цагийн тоолуур ──
-function LiveClock() {
-  const [now, setNow] = React.useState(new Date());
-  React.useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const hh = String(now.getHours()).padStart(2,"0");
-  const mm = String(now.getMinutes()).padStart(2,"0");
-  const ss = String(now.getSeconds()).padStart(2,"0");
-  const yy = now.getFullYear();
-  const mo = String(now.getMonth()+1).padStart(2,"0");
-  const dd = String(now.getDate()).padStart(2,"0");
-  return (
-    <div style={{textAlign:"right",lineHeight:1.2}}>
-      <div style={{fontSize:"18px",fontWeight:900,color:"#fff",letterSpacing:"0.05em"}}>{hh}:{mm}:{ss}</div>
-      <div style={{fontSize:"10px",color:"rgba(255,255,255,0.6)",fontWeight:600}}>{yy}.{mo}.{dd}</div>
     </div>
   );
 }
