@@ -1573,8 +1573,10 @@ function LoginScreen({ onLogin }) {
       tg.ready();
       tg.expand();
       // Header color
-      tg.setHeaderColor("#0f172a");
-      tg.setBackgroundColor("#f0f4f8");
+      if (tg.version && parseFloat(tg.version) >= 6.1) {
+        try { tg.setHeaderColor("#0f172a"); } catch(e) {}
+        try { tg.setBackgroundColor("#f0f4f8"); } catch(e) {}
+      }
     }
 
     const user = getTelegramUser();
