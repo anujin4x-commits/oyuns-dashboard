@@ -46,6 +46,24 @@ const CUR_SYM   = { MNT:"₮", RUB:"₽", USDT:"$" };
 const DEFAULT_BAL = Object.fromEntries(DEFAULT_ACCOUNTS.map(a => [a.id, 0]));
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Огноо форматлах: "2026-03-01T21:00:00.000Z" → "2026/03/01 21:00"
+function fmtDateDisplay(val) {
+  if (!val) return "";
+  try {
+    const d = new Date(val);
+    if (isNaN(d)) return String(val);
+    const yy = d.getFullYear();
+    const mo = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    if (String(val).includes("T") || String(val).includes(" ")) {
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mm = String(d.getMinutes()).padStart(2,"0");
+      return yy+"/"+mo+"/"+dd+" "+hh+":"+mm;
+    }
+    return yy+"/"+mo+"/"+dd;
+  } catch(e) { return String(val); }
+}
+
 const RATE_PAIRS = [
   { from:"MNT", to:"USDT", label:"MNT → USDT", rateLabel:"1 USDT = ? MNT", multiply:false },
   { from:"MNT", to:"RUB",  label:"MNT → RUB",  rateLabel:"1 RUB = ? MNT",  multiply:false },
@@ -572,16 +590,27 @@ function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx, onDelete }) {
   );
 }
 
-function AddDebtModal({ onClose, onSave }) {
-  const [form, setForm] = useState({debtType:"Авлага",name:"",date:today(),amount:"",currency:"MNT",note:"",status:"Хүлээгдэж буй"});
+function AddDebtModal({ onClose, onSave, editData }) {
+  const isEdit = !!editData;
+  const [form, setForm] = useState(editData ? {
+    debtType: editData.debtType || "Авлага",
+    name:     editData.name     || "",
+    date:     (editData.date||today()).slice(0,10),
+    amount:   String(editData.amount || ""),
+    currency: editData.currency || "MNT",
+    note:     editData.note     || "",
+    status:   editData.status   || "Хүлээгдэж буй",
+  } : {debtType:"Авлага",name:"",date:today(),amount:"",currency:"MNT",note:"",status:"Хүлээгдэж буй"});
   const set = (k,v) => setForm(f => ({...f,[k]:v}));
   function save() {
     if (!form.name || !form.amount) { alert("Нэр болон дүн оруулна уу"); return; }
-    onSave({ ...form, amount: Number(form.amount), id: Date.now().toString() });
+    const base = isEdit ? { ...editData } : { id: Date.now().toString(), payments: [] };
+    onSave({ ...base, ...form, amount: Number(form.amount) });
     onClose();
   }
+  const ac = form.debtType === "Авлага" ? "#1a56db" : "#f59e0b";
   return (
-    <Modal title="Авлага / Зээл оруулах" onClose={onClose}>
+    <Modal title={isEdit ? "Авлага/Зээл засах" : "Авлага / Зээл нэмэх"} onClose={onClose}>
       <Field label="Төрөл">
         <div style={{display:"flex",gap:"8px"}}>
           {["Авлага","Зээл"].map(t => (
@@ -594,7 +623,7 @@ function AddDebtModal({ onClose, onSave }) {
       </Field>
       <Field label="Нэр"><input style={inp} value={form.name} onChange={e => set("name",e.target.value)} placeholder="Компани / хүний нэр"/></Field>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-        <Field label="Дүн"><input style={inp} type="number" value={form.amount} onChange={e => set("amount",e.target.value)} placeholder="0"/></Field>
+        <Field label="Нийт дүн"><input style={inp} type="number" value={form.amount} onChange={e => set("amount",e.target.value)} placeholder="0"/></Field>
         <Field label="Валют">
           <select style={{...inp,cursor:"pointer"}} value={form.currency} onChange={e => set("currency",e.target.value)}>
             {["MNT","RUB","USDT"].map(c => <option key={c}>{c}</option>)}
@@ -605,45 +634,159 @@ function AddDebtModal({ onClose, onSave }) {
       <Field label="Тайлбар"><input style={inp} value={form.note} onChange={e => set("note",e.target.value)} placeholder="Нэмэлт тайлбар"/></Field>
       <div style={{display:"flex",gap:"10px",marginTop:"6px"}}>
         <Btn variant="ghost" onClick={onClose} style={{flex:1}}>Болих</Btn>
-        <Btn onClick={save} style={{flex:1}}>Хадгалах</Btn>
+        <Btn onClick={save} style={{flex:1,background:ac}}>{isEdit ? "Хадгалах" : "Нэмэх"}</Btn>
       </div>
     </Modal>
   );
 }
 
-function DebtSection({ debts, onAdd, onToggle, onDelete }) {
+function AddPaymentModal({ debt, onClose, onSave }) {
+  const paidSoFar = (debt.payments||[]).reduce((s,p) => s + Number(p.amount), 0);
+  const remaining = Number(debt.amount) - paidSoFar;
+  const [amount, setAmount] = useState("");
+  const [date,   setDate]   = useState(today());
+  const [note,   setNote]   = useState("");
+  const numAmt   = parseFloat(amount) || 0;
+  const afterPay = remaining - numAmt;
+  const ac  = debt.debtType === "Авлага" ? "#1a56db" : "#f59e0b";
+  const sym = {MNT:"\u20ae",RUB:"\u20bd",USDT:"$"}[debt.currency]||"\u20ae";
+  function fmtN(n) { return sym + Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0}); }
+  function save() {
+    if (!amount || numAmt <= 0) { alert("Дүн оруулна уу"); return; }
+    if (numAmt > remaining + 0.01) { alert("Үлдэгдэл дүнгээс их байна"); return; }
+    const payment = { id: Date.now().toString(), amount: numAmt, date, note };
+    const newPayments = [...(debt.payments||[]), payment];
+    const newPaid = paidSoFar + numAmt;
+    const newStatus = newPaid >= Number(debt.amount) - 0.01 ? "Төлөгдсөн" : "Хүлээгдэж буй";
+    onSave({ ...debt, payments: newPayments, status: newStatus });
+    onClose();
+  }
+  const pct = Number(debt.amount) > 0 ? Math.min((paidSoFar/Number(debt.amount))*100, 100) : 0;
+  return (
+    <Modal title={"Төлөлт нэмэх — " + debt.name} onClose={onClose}>
+      <div style={{background:"#f8fafc",borderRadius:"12px",padding:"14px 16px",marginBottom:"14px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
+          <div><div style={{fontSize:"10px",color:"#94a3b8",fontWeight:700,marginBottom:"3px"}}>НИЙТ ДҮН</div><div style={{fontWeight:900,fontSize:"13px",color:"#0f172a"}}>{fmtN(debt.amount)}</div></div>
+          <div><div style={{fontSize:"10px",color:"#0e9f6e",fontWeight:700,marginBottom:"3px"}}>ТӨЛСӨН</div><div style={{fontWeight:900,fontSize:"13px",color:"#0e9f6e"}}>{fmtN(paidSoFar)}</div></div>
+          <div><div style={{fontSize:"10px",color:ac,fontWeight:700,marginBottom:"3px"}}>ҮЛДЭГДЭЛ</div><div style={{fontWeight:900,fontSize:"13px",color:ac}}>{fmtN(remaining)}</div></div>
+        </div>
+        <div style={{marginTop:"10px",background:"#e2e8f0",borderRadius:"6px",height:"8px",overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:"6px",background:"#0e9f6e",width:pct+"%",transition:"width 0.3s"}}/>
+        </div>
+        <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"4px",textAlign:"right"}}>{pct.toFixed(0)}% төлөгдсөн</div>
+      </div>
+      <Field label={"Төлөх дүн (" + debt.currency + ")"}>
+        <input style={inp} type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0" autoFocus/>
+        {numAmt > 0 && (
+          <div style={{marginTop:"6px",fontSize:"12px",color:afterPay<=0.01?"#0e9f6e":"#64748b",fontWeight:600,display:"flex",alignItems:"center",gap:"6px"}}>
+            <span>Дараа үлдэгдэл: {fmtN(Math.max(0,afterPay))}</span>
+            {afterPay <= 0.01 && <span style={{background:"#d1fae5",color:"#065f46",borderRadius:"5px",padding:"1px 7px",fontSize:"11px"}}>&#10003; Бүрэн</span>}
+          </div>
+        )}
+      </Field>
+      <Field label="Огноо"><input style={inp} type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field>
+      <Field label="Тайлбар"><input style={inp} value={note} onChange={e=>setNote(e.target.value)} placeholder="Нэмэлт тайлбар"/></Field>
+      {(debt.payments||[]).length > 0 && (
+        <div style={{marginTop:"4px",marginBottom:"4px"}}>
+          <div style={{fontSize:"10px",fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"6px"}}>Төлөлтийн түүх</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"120px",overflowY:"auto"}}>
+            {debt.payments.map((p,pidx) => (
+              <div key={p.id||pidx} style={{display:"flex",justifyContent:"space-between",fontSize:"12px",padding:"6px 10px",background:"#f0fdf4",borderRadius:"7px"}}>
+                <span style={{color:"#475569"}}>{fmtDateDisplay(p.date)}{p.note?" · "+p.note:""}</span>
+                <span style={{fontWeight:700,color:"#0e9f6e"}}>{fmtN(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{display:"flex",gap:"10px",marginTop:"6px"}}>
+        <Btn variant="ghost" onClick={onClose} style={{flex:1}}>Болих</Btn>
+        <Btn onClick={save} style={{flex:1,background:"#0e9f6e"}}>+ Нэмэх</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment }) {
   const pending = debts.filter(d => d.status==="Хүлээгдэж буй");
   const paid    = debts.filter(d => d.status==="Төлөгдсөн");
   const CURRENCIES = ["MNT","RUB","USD"];
-  const CUR_SYM2 = { MNT:"₮", RUB:"₽", USD:"$", USDT:"$" };
-  function sumByCur(type) {
+  const CUR_SYM2 = { MNT:"\u20ae", RUB:"\u20bd", USD:"$", USDT:"$" };
+  function sumRemaining(type) {
     const res = {};
     pending.filter(d => d.debtType===type).forEach(d => {
       const cur = d.currency==="USDT"?"USD":(d.currency||"MNT");
-      res[cur] = (res[cur]||0) + (Number(d.amount)||0);
+      const paidAmt = (d.payments||[]).reduce((s,p)=>s+Number(p.amount),0);
+      const rem = Number(d.amount) - paidAmt;
+      res[cur] = (res[cur]||0) + Math.max(0, rem);
     });
     return res;
   }
-  const avlagaSums = sumByCur("Авлага");
-  const zeelSums   = sumByCur("Зээл");
+  const avlagaSums = sumRemaining("Авлага");
+  const zeelSums   = sumRemaining("Зээл");
   const hasAvlaga  = Object.values(avlagaSums).some(v => v>0);
   const hasZeel    = Object.values(zeelSums).some(v => v>0);
 
   function Card({d}) {
+    const paidAmt   = (d.payments||[]).reduce((s,p)=>s+Number(p.amount),0);
+    const remaining = Number(d.amount) - paidAmt;
+    const hasPartial = paidAmt > 0 && remaining > 0.01;
+    const pct  = Number(d.amount)>0 ? Math.min((paidAmt/Number(d.amount))*100,100) : 0;
+    const ac   = d.debtType==="Авлага" ? "#1a56db" : "#f59e0b";
+    const isBuyi = d.status==="Хүлээгдэж буй";
+    const sym  = {MNT:"\u20ae",RUB:"\u20bd",USDT:"$"}[d.currency]||"\u20ae";
+    function fmtN(n){ return sym+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0}); }
     return (
-      <div style={{background:"#fff",borderRadius:"12px",padding:"13px 14px",border:"1px solid #e8edf5",borderLeft:`4px solid ${d.debtType==="Авлага"?"#1a56db":"#f59e0b"}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div style={{flex:1}}>
-            <div style={{display:"flex",gap:"7px",alignItems:"center",flexWrap:"wrap",marginBottom:"4px"}}>
-              <span style={{fontSize:"11px",fontWeight:700,padding:"2px 8px",borderRadius:"6px",background:d.debtType==="Авлага"?"#dbeafe":"#fef3c7",color:d.debtType==="Авлага"?"#1e40af":"#92400e"}}>{d.debtType}</span>
+      <div style={{background:"#fff",borderRadius:"12px",padding:"13px 14px",border:"1px solid #e8edf5",borderLeft:"4px solid "+ac}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",gap:"7px",alignItems:"center",flexWrap:"wrap",marginBottom:"6px"}}>
+              <span style={{fontSize:"11px",fontWeight:700,padding:"2px 8px",borderRadius:"6px",flexShrink:0,background:d.debtType==="Авлага"?"#dbeafe":"#fef3c7",color:d.debtType==="Авлага"?"#1e40af":"#92400e"}}>{d.debtType}</span>
               <span style={{fontWeight:800,color:"#0f172a",fontSize:"14px"}}>{d.name}</span>
             </div>
-            <div style={{fontSize:"13px",color:"#475569"}}><strong>{fmt(d.amount,d.currency)}</strong> · {d.date}</div>
-            {d.note && <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"2px",fontStyle:"italic"}}>{d.note}</div>}
+            {hasPartial ? (
+              <div style={{marginBottom:"4px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap",marginBottom:"4px"}}>
+                  <span style={{fontSize:"12px",color:"#94a3b8",textDecoration:"line-through"}}>{fmtN(d.amount)}</span>
+                  <span style={{fontSize:"14px",fontWeight:800,color:ac}}>{fmtN(remaining)}</span>
+                  <span style={{fontSize:"10px",color:"#94a3b8"}}>үлдэгдэл</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                  <div style={{flex:1,background:"#e2e8f0",borderRadius:"4px",height:"5px",overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:"4px",background:"#0e9f6e",width:pct+"%"}}/>
+                  </div>
+                  <span style={{fontSize:"10px",color:"#0e9f6e",fontWeight:700,flexShrink:0}}>{fmtN(paidAmt)} төлсөн</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{fontSize:"14px",fontWeight:800,color:"#0f172a",marginBottom:"4px"}}>{fmtN(d.amount)}</div>
+            )}
+            <div style={{fontSize:"11px",color:"#94a3b8"}}>{fmtDateDisplay(d.date)}</div>
+            {d.note && <div style={{fontSize:"11px",color:"#94a3b8",marginTop:"2px",fontStyle:"italic"}}>{d.note}</div>}
+            {(d.payments||[]).length > 0 && (
+              <div style={{marginTop:"6px",display:"flex",flexWrap:"wrap",gap:"4px"}}>
+                {d.payments.map((p,pi)=>(
+                  <span key={p.id||pi} style={{fontSize:"10px",background:"#f0fdf4",color:"#0e9f6e",borderRadius:"5px",padding:"2px 7px",fontWeight:600}}>
+                    {fmtN(p.amount)} · {fmtDateDisplay(p.date)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <div style={{display:"flex",gap:"6px",marginLeft:"8px"}}>
-            <button onClick={() => onToggle(d.id)} style={{background:d.status==="Хүлээгдэж буй"?"#d1fae5":"#f1f5f9",border:"none",borderRadius:"8px",padding:"6px 10px",cursor:"pointer",fontSize:"13px",color:d.status==="Хүлээгдэж буй"?"#065f46":"#64748b"}}>{d.status==="Хүлээгдэж буй"?"✓":"↩"}</button>
-            <button onClick={() => onDelete(d.id)} style={{background:"#fee2e2",border:"none",borderRadius:"8px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#991b1b"}}>🗑</button>
+          <div style={{display:"flex",flexDirection:"column",gap:"5px",flexShrink:0}}>
+            <div style={{display:"flex",gap:"5px"}}>
+              <button onClick={()=>onEdit(d)} style={{background:"#eff6ff",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px"}} title="Засах">&#9998;</button>
+              <button onClick={()=>onDelete(d.id)} style={{background:"#fee2e2",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#991b1b"}}>&#128465;</button>
+            </div>
+            {isBuyi && (
+              <div style={{display:"flex",gap:"5px"}}>
+                <button onClick={()=>onAddPayment(d)} style={{background:ac+"22",border:"none",borderRadius:"7px",padding:"6px 8px",cursor:"pointer",fontSize:"12px",color:ac,fontWeight:700}} title="Хэсэгчилсэн төлөлт">+{sym}</button>
+                <button onClick={()=>onToggle(d.id)} style={{background:"#d1fae5",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#065f46",fontWeight:700}} title="Бүрэн төлсөн">&#10003;</button>
+              </div>
+            )}
+            {!isBuyi && (
+              <button onClick={()=>onToggle(d.id)} style={{background:"#f1f5f9",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#64748b"}} title="Буцаах">&#8617;</button>
+            )}
           </div>
         </div>
       </div>
@@ -658,37 +801,37 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"20px"}}>
         <div style={{background:"#eff6ff",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #1a56db"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📥 Нийт авлага</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>&#128229; Авлага үлдэгдэл</div>
           {hasAvlaga
             ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                 {CURRENCIES.filter(c => avlagaSums[c]>0).map(c => (
                   <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{fontSize:"12px",fontWeight:700,color:"#64748b",background:"#dbeafe",borderRadius:"5px",padding:"2px 8px"}}>{CUR_SYM2[c]}</span>
-                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(avlagaSums[c]).toLocaleString()}</span>
+                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(avlagaSums[c]).toLocaleString("en-US",{maximumFractionDigits:0})}</span>
                   </div>
                 ))}
               </div>
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#93c5fd",marginTop:"10px",borderTop:"1px solid #dbeafe",paddingTop:"8px"}}>
-            {pending.filter(d => d.debtType==="Авлага").length} хүлээгдэж буй гүйлгээ
+            {pending.filter(d => d.debtType==="Авлага").length} хүлээгдэж буй
           </div>
         </div>
         <div style={{background:"#fffbeb",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #f59e0b"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📤 Нийт зээл</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>&#128228; Зээл үлдэгдэл</div>
           {hasZeel
             ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                 {CURRENCIES.filter(c => zeelSums[c]>0).map(c => (
                   <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{fontSize:"12px",fontWeight:700,color:"#92400e",background:"#fde68a",borderRadius:"5px",padding:"2px 8px"}}>{CUR_SYM2[c]}</span>
-                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(zeelSums[c]).toLocaleString()}</span>
+                    <span style={{fontWeight:900,fontSize:"18px",color:"#0f172a"}}>{CUR_SYM2[c]}{Number(zeelSums[c]).toLocaleString("en-US",{maximumFractionDigits:0})}</span>
                   </div>
                 ))}
               </div>
             : <div style={{fontSize:"13px",color:"#94a3b8"}}>—</div>
           }
           <div style={{fontSize:"10px",color:"#fcd34d",marginTop:"10px",borderTop:"1px solid #fde68a",paddingTop:"8px"}}>
-            {pending.filter(d => d.debtType==="Зээл").length} хүлээгдэж буй гүйлгээ
+            {pending.filter(d => d.debtType==="Зээл").length} хүлээгдэж буй
           </div>
         </div>
       </div>
@@ -709,127 +852,6 @@ function DebtSection({ debts, onAdd, onToggle, onDelete }) {
             )}
           </>
       }
-    </div>
-  );
-}
-
-// ════════════════════════════════
-// FINANCE DASHBOARD
-// ════════════════════════════════
-function fmtMNT(n) {
-  if (!n && n !== 0) return "₮0";
-  const num = Number(n);
-  return (num<0?"-₮":"₮") + Math.abs(num).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function fmtMNTFull(n) {
-  if (!n && n!==0) return "₮0";
-  const num = Number(n);
-  return (num<0?"-₮":"₮") + Math.abs(num).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function fmtUSD(n) {
-  if (!n && n!==0) return "$0.00";
-  return (Number(n)<0?"-$":"$") + Math.abs(Number(n)).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-
-function LiveClock() {
-  const [now, setNow] = React.useState(new Date());
-  React.useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const UB_OFFSET = 8 * 60;
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-  const mn = new Date(utcMs + UB_OFFSET * 60000);
-  const yy = mn.getFullYear();
-  const mo = String(mn.getMonth()+1).padStart(2,'0');
-  const dd = String(mn.getDate()).padStart(2,'0');
-  const hh = String(mn.getHours()).padStart(2,'0');
-  const mm = String(mn.getMinutes()).padStart(2,'0');
-  const ss = String(mn.getSeconds()).padStart(2,'0');
-  return (
-    <div style={{textAlign:"right"}}>
-      <div style={{fontSize:"18px",fontWeight:900,color:"#fff",letterSpacing:"0.05em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{hh}:{mm}:{ss}</div>
-      <div style={{fontSize:"11px",color:"#93c5fd",marginTop:"2px",fontWeight:600}}>{yy}.{mo}.{dd}</div>
-    </div>
-  );
-}
-
-function MiniBar({value, max, color}) {
-  const pct = max > 0 ? Math.min((Math.abs(value)/max)*100, 100) : 0;
-  return (
-    <div style={{background:"#f1f5f9",borderRadius:"4px",height:"6px",overflow:"hidden",marginTop:"4px"}}>
-      <div style={{background:color,height:"100%",borderRadius:"4px",width:`${pct}%`,transition:"width 0.4s ease"}}/>
-    </div>
-  );
-}
-
-function LineChart({ data, divider }) {
-  const W = 600, H = 160, PAD = { t:20, r:16, b:32, l:80 };
-  const iW = W - PAD.l - PAD.r;
-  const iH = H - PAD.t - PAD.b;
-  if (!data || !data.length) return <div style={{color:"#94a3b8",fontSize:"13px",padding:"30px 0",textAlign:"center"}}>Өгөгдөл байхгүй</div>;
-  const vals = data.map(([,v]) => v.profitMNT);
-  const minV = Math.min(...vals, 0);
-  const maxV = Math.max(...vals, 0);
-  const range = maxV - minV || 1;
-  function xPos(i) { return PAD.l + (i / Math.max(data.length-1,1)) * iW; }
-  function yPos(v) { return PAD.t + iH - ((v - minV) / range) * iH; }
-  const pts   = data.map(([,v],i) => `${xPos(i)},${yPos(v.profitMNT)}`).join(" ");
-  const zeroY = yPos(0);
-  const tickCount = 4;
-  const ticks = Array.from({length:tickCount+1},(_,i) => minV + (maxV-minV)*i/tickCount).map(v => ({v,y:yPos(v)}));
-  function xLabel(k) {
-    if (!k || k==="?") return "";
-    if (k.length===7) return k.slice(5);
-    return k.slice(5).replace("-","/");
-  }
-  const showEvery = data.length > 20 ? Math.ceil(data.length/10) : data.length > 10 ? 2 : 1;
-  return (
-    <div style={{overflowX:"auto"}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:"280px",height:`${H}px`,display:"block"}}>
-        <defs>
-          <linearGradient id="lg_g" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0e9f6e" stopOpacity="0.18"/>
-            <stop offset="100%" stopColor="#0e9f6e" stopOpacity="0"/>
-          </linearGradient>
-          <linearGradient id="lg_r" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0"/>
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.12"/>
-          </linearGradient>
-        </defs>
-        {ticks.map((t,i) => (
-          <g key={i}>
-            <line x1={PAD.l} y1={t.y} x2={W-PAD.r} y2={t.y} stroke="#f1f5f9" strokeWidth="1"/>
-            <text x={PAD.l-6} y={t.y+4} textAnchor="end" fontSize="9" fill="#94a3b8">
-              {t.v===0?"0":t.v>=1e6?(t.v/1e6).toFixed(1)+"M":t.v>=1e3?(t.v/1e3).toFixed(0)+"K":t.v.toFixed(0)}
-            </text>
-          </g>
-        ))}
-        <line x1={PAD.l} y1={zeroY} x2={W-PAD.r} y2={zeroY} stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="4,3"/>
-        {divider!=null && divider>0 && divider<data.length && (
-          <g>
-            <line x1={xPos(divider-0.5)} y1={PAD.t} x2={xPos(divider-0.5)} y2={H-PAD.b} stroke="#e2e8f0" strokeWidth="1.5" strokeDasharray="6,3"/>
-            <text x={xPos(Math.floor(divider/2))} y={PAD.t-4} textAnchor="middle" fontSize="8" fill="#94a3b8">өмнөх</text>
-            <text x={xPos(divider+Math.floor((data.length-divider)/2))} y={PAD.t-4} textAnchor="middle" fontSize="8" fill="#1a56db">тухайн</text>
-          </g>
-        )}
-        <path d={`M${xPos(0)},${zeroY} ${data.map(([,v],i)=>`L${xPos(i)},${yPos(v.profitMNT)}`).join(" ")} L${xPos(data.length-1)},${zeroY} Z`} fill="url(#lg_g)" opacity="0.8"/>
-        <path d={`M${xPos(0)},${zeroY} ${data.map(([,v],i)=>`L${xPos(i)},${yPos(v.profitMNT)}`).join(" ")} L${xPos(data.length-1)},${zeroY} Z`} fill="url(#lg_r)" opacity="0.8"/>
-        <polyline points={pts} fill="none" stroke="#0e9f6e" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
-        {data.map(([k,v],i) => {
-          const cx = xPos(i), cy = yPos(v.profitMNT);
-          const col = v.profitMNT>=0?"#0e9f6e":"#ef4444";
-          return (
-            <g key={k}>
-              <circle cx={cx} cy={cy} r="3" fill={col} stroke="#fff" strokeWidth="1.5"/>
-              {i%showEvery===0 && (
-                <text x={cx} y={H-4} textAnchor="middle" fontSize="8" fill="#94a3b8"
-                  transform={data.length>12?`rotate(-40,${cx},${H-4})`:""}>{xLabel(k)}</text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
     </div>
   );
 }
@@ -1608,7 +1630,9 @@ export default function App() {
   const [addTxFor, setAddTxFor]   = useState(null);
   const [viewTxFor, setViewTxFor] = useState(null);
   const [editBalFor, setEditBalFor]   = useState(null);
-  const [showDebt, setShowDebt]       = useState(false);
+  const [showDebt,     setShowDebt]     = useState(false);
+  const [editDebtData, setEditDebtData] = useState(null);
+  const [payDebtData,  setPayDebtData]  = useState(null);
   const [showAddAcc, setShowAddAcc]   = useState(false);
   // ── АлсТод Хуулга ──
   const [showAlsTod, setShowAlsTod]   = useState(false);
@@ -1876,6 +1900,8 @@ export default function App() {
               setDebts(prev=>prev.filter(d=>d.id!==id));
               await apiPost({action:"deleteDebt",id});
             }}
+            onEdit={d => setEditDebtData(d)}
+            onAddPayment={d => setPayDebtData(d)}
           />
         )}
       </div>
@@ -1905,6 +1931,28 @@ export default function App() {
         <AddDebtModal
           onClose={()=>setShowDebt(false)}
           onSave={async d=>{setDebts(prev=>[...prev,d]);await apiPost({action:"addDebt",data:d});}}
+        />
+      )}
+      {editDebtData && (
+        <AddDebtModal
+          editData={editDebtData}
+          onClose={()=>setEditDebtData(null)}
+          onSave={async d=>{
+            setDebts(prev=>prev.map(x=>x.id===d.id?d:x));
+            await apiPost({action:"updateDebt",data:d});
+            setEditDebtData(null);
+          }}
+        />
+      )}
+      {payDebtData && (
+        <AddPaymentModal
+          debt={payDebtData}
+          onClose={()=>setPayDebtData(null)}
+          onSave={async d=>{
+            setDebts(prev=>prev.map(x=>x.id===d.id?d:x));
+            await apiPost({action:"updateDebt",data:d});
+            setPayDebtData(null);
+          }}
         />
       )}
       {showAddAcc && (
