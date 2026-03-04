@@ -12,21 +12,19 @@ function useWindowWidth() {
 }
 
 // ── Зөвшөөрөгдсөн Telegram хэрэглэгчид (user ID → нэр/өнгө) ──
-// ID нь хэзээ ч өөрчлөгддөггүй тул username-ээс найдвартай
 const ALLOWED_TG_USERS = {
   1447446407: { name: "Сүрэнжав", username: "oyuns",    color: "#1a56db" },
   1920453419: { name: "Анужин",   username: "anujin4x", color: "#0e9f6e" },
 };
 
-// ── Telegram WebApp SDK helper ──
 function getTelegramUser() {
   try {
     const tg = window.Telegram?.WebApp;
     if (!tg || !tg.initDataUnsafe?.user) return null;
     const u = tg.initDataUnsafe.user;
     return {
-      telegramId: u.id,                              // тоо — үндсэн шалгуур
-      username:   (u.username || "").toLowerCase(),  // нэмэлт мэдээлэл
+      telegramId: u.id,
+      username:   (u.username || "").toLowerCase(),
       firstName:  u.first_name || "",
       lastName:   u.last_name  || "",
     };
@@ -46,7 +44,6 @@ const CUR_SYM   = { MNT:"₮", RUB:"₽", USDT:"$" };
 const DEFAULT_BAL = Object.fromEntries(DEFAULT_ACCOUNTS.map(a => [a.id, 0]));
 const today = () => new Date().toISOString().slice(0, 10);
 
-// Огноо форматлах: "2026-03-01T21:00:00.000Z" → "2026/03/01 21:00"
 function fmtDateDisplay(val) {
   if (!val) return "";
   try {
@@ -80,13 +77,102 @@ function fmt(n, cur) {
   return (n < 0 ? "-" : "") + s + " " + (CUR_SYM[cur] || "$");
 }
 
+// ── Finance formatting helpers ──
+function fmtMNT(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  const s = abs >= 1000000
+    ? (abs / 1000000).toLocaleString("mn-MN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "сая"
+    : abs.toLocaleString("mn-MN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (n < 0 ? "-" : "") + "₮" + s;
+}
+
+function fmtMNTFull(n) {
+  if (n === null || n === undefined || isNaN(n) || n === 0) return "—";
+  const abs = Math.abs(n);
+  const s = abs.toLocaleString("mn-MN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (n < 0 ? "-" : "") + "₮" + s;
+}
+
+function fmtUSD(n) {
+  if (n === null || n === undefined || isNaN(n) || n === 0) return "—";
+  const abs = Math.abs(n);
+  const s = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? "-" : "") + "$" + s;
+}
+
+// ── Chart components ──
+function MiniBar({ value, max, color }) {
+  const pct = max > 0 ? Math.max((value / max) * 100, 2) : 2;
+  return (
+    <div style={{ background: "#f1f5f9", borderRadius: "4px", height: "6px", overflow: "hidden" }}>
+      <div style={{ height: "100%", borderRadius: "4px", background: color, width: pct + "%" }} />
+    </div>
+  );
+}
+
+function LineChart({ data, divider }) {
+  if (!data || data.length === 0) return (
+    <div style={{ color: "#94a3b8", fontSize: "13px", padding: "20px 0" }}>Өгөгдөл байхгүй</div>
+  );
+  const values = data.map(([, v]) => v.profitMNT);
+  const maxVal = Math.max(...values, 1);
+  const minVal = Math.min(...values, 0);
+  const range = maxVal - minVal || 1;
+  const W = 100, H = 80;
+  const pts = data.map(([, v], i) => {
+    const x = data.length === 1 ? W / 2 : (i / (data.length - 1)) * W;
+    const y = H - ((v.profitMNT - minVal) / range) * (H - 8) - 4;
+    return [x, y];
+  });
+  const pathD = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
+  const areaD = pts.length > 0
+    ? `${pathD} L${pts[pts.length - 1][0]},${H} L${pts[0][0]},${H} Z`
+    : "";
+  const midIdx = divider ? divider - 1 : null;
+  return (
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <div style={{ minWidth: "280px" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "120px" }} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#1a56db" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#1a56db" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          {midIdx !== null && midIdx > 0 && midIdx < data.length && (
+            <line
+              x1={(midIdx / (data.length - 1)) * W} y1="0"
+              x2={(midIdx / (data.length - 1)) * W} y2={H}
+              stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="2,2"
+            />
+          )}
+          <path d={areaD} fill="url(#grad1)" />
+          <path d={pathD} fill="none" stroke="#1a56db" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+          {pts.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r="1.5" fill="#1a56db" />
+          ))}
+        </svg>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+          {data
+            .filter((_, i) => data.length <= 12 || i % Math.ceil(data.length / 12) === 0)
+            .map(([label], i) => (
+              <div key={i} style={{ fontSize: "9px", color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>
+                {label?.slice(5) || label}
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════
 // Apps Script API
 // ════════════════════════════════════════════════════
 const SCRIPT_URL = "https://oyuns-dashboard.anujin4x.workers.dev";
 const CACHE_TTL  = 5 * 60 * 1000;
 
-// ── In-memory cache (localStorage-аас илүү найдвартай, Telegram-д ажилладаг) ──
 const _cache = {};
 
 async function apiGet(params, forceRefresh = false) {
@@ -95,7 +181,6 @@ async function apiGet(params, forceRefresh = false) {
     const { ts, data } = _cache[key];
     if (Date.now() - ts < CACHE_TTL) return data;
   }
-  // localStorage fallback (browser орчинд)
   if (!forceRefresh) {
     try {
       const c = localStorage.getItem(key);
@@ -122,7 +207,6 @@ function clearApiCache() {
 }
 
 async function apiPost(body) {
-  // Telegram болон browser хоёуланд ажилладаг - cors mode + retry
   const MAX_RETRY = 3;
   for (let i = 0; i < MAX_RETRY; i++) {
     try {
@@ -135,7 +219,6 @@ async function apiPost(body) {
         redirect: "follow",
       });
       if (res.ok || res.status === 0) {
-        // Холбогдох cache устгана (шинэ өгөгдөл авах)
         const action = body.action || "";
         if (action.includes("Transaction") || action.includes("Balance") || action === "setBalance") {
           delete _cache["oyuns_action=getAll"];
@@ -234,7 +317,6 @@ function AlsTodHuulgaModal({ onClose }) {
     })();
   }, []);
 
-  // Огноогоор шүүх
   useEffect(() => {
     if (!startDate && !endDate) { setFiltered(rows); return; }
     const s = startDate ? new Date(startDate) : null;
@@ -265,7 +347,6 @@ function AlsTodHuulgaModal({ onClose }) {
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",backdropFilter:"blur(5px)"}}>
       <div style={{background:"#fff",borderRadius:"18px",width:"100%",maxWidth:"980px",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.28)"}}>
 
-        {/* ── Header ── */}
         <div style={{background:"linear-gradient(135deg,#0f172a 0%,#1a56db 100%)",borderRadius:"18px 18px 0 0",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <div style={{color:"#fff",fontWeight:900,fontSize:"17px",letterSpacing:"0.02em"}}>📋 АлсТод ББСБ — Хуулга</div>
@@ -284,30 +365,20 @@ function AlsTodHuulgaModal({ onClose }) {
           </div>
         </div>
 
-        {/* ── Filter bar ── */}
         <div style={{padding:"12px 20px",background:"#f8fafc",borderBottom:"1px solid #e2e8f0",display:"flex",gap:"10px",alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
           <label style={{fontSize:"12px",fontWeight:700,color:"#64748b"}}>📅 Огноо:</label>
-          <input
-            type="date" value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            style={{padding:"7px 10px",borderRadius:"8px",border:"1.5px solid #e2e8f0",fontSize:"12px",fontFamily:"inherit",outline:"none",background:"#fff"}}
-          />
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:"8px",border:"1.5px solid #e2e8f0",fontSize:"12px",fontFamily:"inherit",outline:"none",background:"#fff"}}/>
           <span style={{color:"#94a3b8",fontWeight:700,fontSize:"14px"}}>—</span>
-          <input
-            type="date" value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            style={{padding:"7px 10px",borderRadius:"8px",border:"1.5px solid #e2e8f0",fontSize:"12px",fontFamily:"inherit",outline:"none",background:"#fff"}}
-          />
-          <button
-            onClick={() => { setStartDate(""); setEndDate(""); }}
-            style={{padding:"7px 14px",borderRadius:"8px",border:"none",background:"#e2e8f0",color:"#64748b",fontWeight:700,fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}
-          >↺ Бүгд</button>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:"8px",border:"1.5px solid #e2e8f0",fontSize:"12px",fontFamily:"inherit",outline:"none",background:"#fff"}}/>
+          <button onClick={() => { setStartDate(""); setEndDate(""); }}
+            style={{padding:"7px 14px",borderRadius:"8px",border:"none",background:"#e2e8f0",color:"#64748b",fontWeight:700,fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>↺ Бүгд</button>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"8px"}}>
             <span style={{fontSize:"12px",color:"#64748b",fontWeight:700,background:"#e2e8f0",borderRadius:"7px",padding:"4px 12px"}}>{filtered.length} гүйлгээ</span>
           </div>
         </div>
 
-        {/* ── Table ── */}
         <div style={{overflowY:"auto",flex:1}}>
           {loading ? (
             <div style={{textAlign:"center",padding:"80px",color:"#94a3b8",fontSize:"14px",fontWeight:600}}>⏳ Уншиж байна...</div>
@@ -325,18 +396,11 @@ function AlsTodHuulgaModal({ onClose }) {
                 </tr>
                 <tr>
                   {[
-                    {label:"Огноо",    bg:"#1a5276dd"},
-                    {label:"Банк",     bg:"#1a5276dd"},
-                    {label:"Нэр",      bg:"#1a5276dd"},
-                    {label:"Нийт дүн", bg:"#1a5276dd"},
-                    {label:"Шимтгэл",  bg:"#1a5276dd"},
-                    {label:"Огноо",    bg:"#1e8449dd"},
-                    {label:"Банк",     bg:"#1e8449dd"},
-                    {label:"Нэр",      bg:"#1e8449dd"},
-                    {label:"Нийт дүн", bg:"#1e8449dd"},
-                    {label:"Үлдэгдэл", bg:"#145a32dd"},
+                    {label:"Огноо",bg:"#1a5276dd"},{label:"Банк",bg:"#1a5276dd"},{label:"Нэр",bg:"#1a5276dd"},{label:"Нийт дүн",bg:"#1a5276dd"},{label:"Шимтгэл",bg:"#1a5276dd"},
+                    {label:"Огноо",bg:"#1e8449dd"},{label:"Банк",bg:"#1e8449dd"},{label:"Нэр",bg:"#1e8449dd"},{label:"Нийт дүн",bg:"#1e8449dd"},
+                    {label:"Үлдэгдэл",bg:"#145a32dd"},
                   ].map((h, i) => (
-                    <th key={i} style={{padding:"8px 10px",background:h.bg,color:"#fff",fontWeight:700,fontSize:"10px",textAlign: i >= 3 ? "right" : "left",whiteSpace:"nowrap",borderBottom:"2px solid rgba(255,255,255,0.2)"}}>
+                    <th key={i} style={{padding:"8px 10px",background:h.bg,color:"#fff",fontWeight:700,fontSize:"10px",textAlign:i>=3?"right":"left",whiteSpace:"nowrap",borderBottom:"2px solid rgba(255,255,255,0.2)"}}>
                       {h.label}
                     </th>
                   ))}
@@ -344,40 +408,23 @@ function AlsTodHuulgaModal({ onClose }) {
               </thead>
               <tbody>
                 {filtered.map((r, i) => {
-                  const isLast   = i === filtered.length - 1;
-                  const balN     = Number(r.balance);
-                  const balColor = balN < 0 ? "#ef4444" : "#1a56db";
+                  const isLast = i === filtered.length - 1;
+                  const balN = Number(r.balance);
+                  const bColor = balN < 0 ? "#ef4444" : "#1a56db";
                   return (
-                    <tr key={i} style={{
-                      background: isLast ? "#fefce8" : i % 2 === 0 ? "#fff" : "#f8fafc",
-                      borderBottom: "1px solid #f1f5f9",
-                      fontWeight: isLast ? 700 : 400,
-                    }}>
-                      {/* Хүлээн авсан */}
+                    <tr key={i} style={{background:isLast?"#fefce8":i%2===0?"#fff":"#f8fafc",borderBottom:"1px solid #f1f5f9",fontWeight:isLast?700:400}}>
                       <td style={{padding:"7px 10px",color:"#475569",whiteSpace:"nowrap"}}>{r.dateLeft}</td>
                       <td style={{padding:"7px 10px",color:"#475569",whiteSpace:"nowrap"}}>{r.bankLeft}</td>
                       <td style={{padding:"7px 10px",fontWeight:600,color:"#0f172a",maxWidth:"130px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.nameLeft}>{r.nameLeft}</td>
-                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:"#0e9f6e",whiteSpace:"nowrap"}}>
-                        {r.amountLeft !== "" && r.amountLeft !== 0 ? "₮" + fmtNum(r.amountLeft) : ""}
-                      </td>
-                      <td style={{padding:"7px 10px",textAlign:"right",color:"#94a3b8",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>
-                        {r.feeLeft !== "" && r.feeLeft !== 0 ? fmtNum(r.feeLeft) : ""}
-                      </td>
-                      {/* Шилжүүлсэн */}
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:"#0e9f6e",whiteSpace:"nowrap"}}>{r.amountLeft!==""&&r.amountLeft!==0?"₮"+fmtNum(r.amountLeft):""}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",color:"#94a3b8",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>{r.feeLeft!==""&&r.feeLeft!==0?fmtNum(r.feeLeft):""}</td>
                       <td style={{padding:"7px 10px",color:"#475569",whiteSpace:"nowrap"}}>{r.dateRight}</td>
                       <td style={{padding:"7px 10px",color:"#475569",whiteSpace:"nowrap"}}>{r.bankRight}</td>
                       <td style={{padding:"7px 10px",fontWeight:600,color:"#0f172a",maxWidth:"130px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.nameRight}>{r.nameRight}</td>
-                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:"#ef4444",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>
-                        {r.amountRight !== "" && r.amountRight !== 0 ? "₮" + fmtNum(r.amountRight) : ""}
-                      </td>
-                      {/* Үлдэгдэл */}
-                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight: isLast ? 900 : 700,color: r.balance === "" ? "#94a3b8" : balColor,whiteSpace:"nowrap",fontSize: isLast ? "13px" : "12px"}}>
-                        {r.balance !== "" ? "₮" + fmtNum(r.balance) : ""}
-                        {isLast && (
-                          <span style={{fontSize:"9px",marginLeft:"6px",background:"#fbbf24",color:"#78350f",borderRadius:"5px",padding:"2px 6px",fontWeight:700}}>
-                            Одоо
-                          </span>
-                        )}
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:"#ef4444",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>{r.amountRight!==""&&r.amountRight!==0?"₮"+fmtNum(r.amountRight):""}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:isLast?900:700,color:r.balance===""?"#94a3b8":bColor,whiteSpace:"nowrap",fontSize:isLast?"13px":"12px"}}>
+                        {r.balance!==""?"₮"+fmtNum(r.balance):""}
+                        {isLast&&<span style={{fontSize:"9px",marginLeft:"6px",background:"#fbbf24",color:"#78350f",borderRadius:"5px",padding:"2px 6px",fontWeight:700}}>Одоо</span>}
                       </td>
                     </tr>
                   );
@@ -387,17 +434,12 @@ function AlsTodHuulgaModal({ onClose }) {
           )}
         </div>
 
-        {/* ── Footer ── */}
         {!loading && !error && filtered.length > 0 && (
           <div style={{padding:"12px 20px",background:"#f8fafc",borderTop:"1px solid #e2e8f0",borderRadius:"0 0 18px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-            <div style={{fontSize:"12px",color:"#94a3b8"}}>
-              Нийт <strong style={{color:"#0f172a"}}>{filtered.length}</strong> гүйлгээ харагдаж байна
-            </div>
+            <div style={{fontSize:"12px",color:"#94a3b8"}}>Нийт <strong style={{color:"#0f172a"}}>{filtered.length}</strong> гүйлгээ</div>
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
               <span style={{fontSize:"12px",color:"#64748b",fontWeight:600}}>Одоогийн үлдэгдэл:</span>
-              <span style={{fontSize:"15px",fontWeight:900,color:balNum >= 0 ? "#0e9f6e" : "#ef4444"}}>
-                {balNum < 0 ? "-" : ""}₮{fmtBal(balNum)}
-              </span>
+              <span style={{fontSize:"15px",fontWeight:900,color:balNum>=0?"#0e9f6e":"#ef4444"}}>{balNum<0?"-":""}₮{fmtBal(balNum)}</span>
             </div>
           </div>
         )}
@@ -596,7 +638,6 @@ function AddAccountModal({ onClose, onSave }) {
   );
 }
 
-// ── BalanceCard ──
 function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx, onDelete }) {
   const isAlsTod = acc.id === "als_tod";
   return (
@@ -623,7 +664,7 @@ function BalanceCard({ acc, bal, onEdit, onViewTx, onAddTx, onDelete }) {
         </button>
         <button
           onClick={() => onViewTx(acc.id)}
-          style={{flex:1,padding:"9px",background: isAlsTod ? "#f59e0b" : "#f8fafc",border: isAlsTod ? "none" : "1px solid #e2e8f0",borderRadius:"10px",cursor:"pointer",fontSize:"13px",color: isAlsTod ? "#fff" : "#475569",fontWeight: isAlsTod ? 700 : 600,fontFamily:"inherit"}}
+          style={{flex:1,padding:"9px",background:isAlsTod?"#f59e0b":"#f8fafc",border:isAlsTod?"none":"1px solid #e2e8f0",borderRadius:"10px",cursor:"pointer",fontSize:"13px",color:isAlsTod?"#fff":"#475569",fontWeight:isAlsTod?700:600,fontFamily:"inherit"}}
         >
           {isAlsTod ? "📋 Хуулга →" : "📋 Хуулга"}
         </button>
@@ -699,7 +740,7 @@ function AddPaymentModal({ debt, onClose, onSave }) {
   const numAmt   = parseFloat(amount) || 0;
   const afterPay = remaining - numAmt;
   const ac  = debt.debtType === "Авлага" ? "#1a56db" : "#f59e0b";
-  const sym = {MNT:"\u20ae",RUB:"\u20bd",USDT:"$"}[debt.currency]||"\u20ae";
+  const sym = {MNT:"₮",RUB:"₽",USDT:"$"}[debt.currency]||"₮";
   function fmtN(n) { return sym + Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0}); }
   function save() {
     if (!amount || numAmt <= 0) { alert("Дүн оруулна уу"); return; }
@@ -730,7 +771,7 @@ function AddPaymentModal({ debt, onClose, onSave }) {
         {numAmt > 0 && (
           <div style={{marginTop:"6px",fontSize:"12px",color:afterPay<=0.01?"#0e9f6e":"#64748b",fontWeight:600,display:"flex",alignItems:"center",gap:"6px"}}>
             <span>Дараа үлдэгдэл: {fmtN(Math.max(0,afterPay))}</span>
-            {afterPay <= 0.01 && <span style={{background:"#d1fae5",color:"#065f46",borderRadius:"5px",padding:"1px 7px",fontSize:"11px"}}>&#10003; Бүрэн</span>}
+            {afterPay <= 0.01 && <span style={{background:"#d1fae5",color:"#065f46",borderRadius:"5px",padding:"1px 7px",fontSize:"11px"}}>✓ Бүрэн</span>}
           </div>
         )}
       </Field>
@@ -761,7 +802,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
   const pending = debts.filter(d => d.status==="Хүлээгдэж буй");
   const paid    = debts.filter(d => d.status==="Төлөгдсөн");
   const CURRENCIES = ["MNT","RUB","USD"];
-  const CUR_SYM2 = { MNT:"\u20ae", RUB:"\u20bd", USD:"$", USDT:"$" };
+  const CUR_SYM2 = { MNT:"₮", RUB:"₽", USD:"$", USDT:"$" };
   function sumRemaining(type) {
     const res = {};
     pending.filter(d => d.debtType===type).forEach(d => {
@@ -784,7 +825,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
     const pct  = Number(d.amount)>0 ? Math.min((paidAmt/Number(d.amount))*100,100) : 0;
     const ac   = d.debtType==="Авлага" ? "#1a56db" : "#f59e0b";
     const isBuyi = d.status==="Хүлээгдэж буй";
-    const sym  = {MNT:"\u20ae",RUB:"\u20bd",USDT:"$"}[d.currency]||"\u20ae";
+    const sym  = {MNT:"₮",RUB:"₽",USDT:"$"}[d.currency]||"₮";
     function fmtN(n){ return sym+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0}); }
     return (
       <div style={{background:"#fff",borderRadius:"12px",padding:"13px 14px",border:"1px solid #e8edf5",borderLeft:"4px solid "+ac}}>
@@ -840,17 +881,17 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:"5px",flexShrink:0}}>
             <div style={{display:"flex",gap:"5px"}}>
-              <button onClick={()=>onEdit(d)} style={{background:"#eff6ff",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px"}} title="Засах">&#9998;</button>
-              <button onClick={()=>onDelete(d.id)} style={{background:"#fee2e2",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#991b1b"}}>&#128465;</button>
+              <button onClick={()=>onEdit(d)} style={{background:"#eff6ff",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px"}} title="Засах">✏</button>
+              <button onClick={()=>onDelete(d.id)} style={{background:"#fee2e2",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#991b1b"}}>🗑</button>
             </div>
             {isBuyi && (
               <div style={{display:"flex",gap:"5px"}}>
                 <button onClick={()=>onAddPayment(d)} style={{background:ac+"22",border:"none",borderRadius:"7px",padding:"6px 8px",cursor:"pointer",fontSize:"12px",color:ac,fontWeight:700}} title="Хэсэгчилсэн төлөлт">+{sym}</button>
-                <button onClick={()=>onToggle(d.id)} style={{background:"#d1fae5",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#065f46",fontWeight:700}} title="Бүрэн төлсөн">&#10003;</button>
+                <button onClick={()=>onToggle(d.id)} style={{background:"#d1fae5",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#065f46",fontWeight:700}} title="Бүрэн төлсөн">✓</button>
               </div>
             )}
             {!isBuyi && (
-              <button onClick={()=>onToggle(d.id)} style={{background:"#f1f5f9",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#64748b"}} title="Буцаах">&#8617;</button>
+              <button onClick={()=>onToggle(d.id)} style={{background:"#f1f5f9",border:"none",borderRadius:"7px",padding:"6px 9px",cursor:"pointer",fontSize:"13px",color:"#64748b"}} title="Буцаах">↩</button>
             )}
           </div>
         </div>
@@ -866,7 +907,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"20px"}}>
         <div style={{background:"#eff6ff",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #1a56db"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>&#128229; Авлага үлдэгдэл</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📩 Авлага үлдэгдэл</div>
           {hasAvlaga
             ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                 {CURRENCIES.filter(c => avlagaSums[c]>0).map(c => (
@@ -883,7 +924,7 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
           </div>
         </div>
         <div style={{background:"#fffbeb",borderRadius:"14px",padding:"16px 18px",borderTop:"4px solid #f59e0b"}}>
-          <div style={{fontSize:"11px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>&#128228; Зээл үлдэгдэл</div>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"12px"}}>📤 Зээл үлдэгдэл</div>
           {hasZeel
             ? <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                 {CURRENCIES.filter(c => zeelSums[c]>0).map(c => (
@@ -900,7 +941,6 @@ function DebtSection({ debts, onAdd, onToggle, onDelete, onEdit, onAddPayment })
           </div>
         </div>
       </div>
-      {/* ── Өнөөдөр / Хоцорсон карт ── */}
       {(() => {
         const todayStr = today();
         const overdue  = pending.filter(d => d.dueDate && d.dueDate < todayStr);
@@ -1187,7 +1227,6 @@ function FinanceDashboard({ rows, loading, search, setSearch, status, setStatus,
 
   return (
     <div style={{paddingBottom:"50px"}}>
-      {/* Товч статистик */}
       {(()=>{
         const succ = rows.filter(r=>r.txStatus!=="Цуцласан"&&r.txStatus!=="Цуцлагдсан");
         const tz8  = new Date(Date.now()+(new Date().getTimezoneOffset()+8*60)*60000);
@@ -1587,12 +1626,10 @@ function LoginScreen({ onLogin }) {
   const [tgUser,   setTgUser]   = useState(null);
 
   useEffect(() => {
-    // Telegram WebApp-г эхлүүлэх
     const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.ready();
       tg.expand();
-      // Header color
       if (tg.version && parseFloat(tg.version) >= 6.1) {
         try { tg.setHeaderColor("#0f172a"); } catch(e) {}
         try { tg.setBackgroundColor("#f0f4f8"); } catch(e) {}
@@ -1603,15 +1640,12 @@ function LoginScreen({ onLogin }) {
     setTgUser(user);
 
     if (!user) {
-      // Dev орчинд (browser) PIN хэрэглэгч шалгах
       setChecking(false);
       return;
     }
 
-    // Telegram User ID-аар шалгана (username өөрчлөгдөж болох тул ID найдвартай)
     const allowed = ALLOWED_TG_USERS[user.telegramId];
     if (allowed) {
-      // ✅ Шууд нэвтэрнэ — ямар ч login дэлгэц харуулахгүй
       onLogin({
         id:       String(user.telegramId),
         name:     allowed.name,
@@ -1619,21 +1653,17 @@ function LoginScreen({ onLogin }) {
         color:    allowed.color,
         tgId:     user.telegramId,
       });
-      // checking=false хийхгүй — onLogin дуудсаны дараа
-      // LoginScreen render болохгүй болно
     } else {
       setDenied(true);
       setChecking(false);
     }
   }, []);
 
-  // Dev/browser орчинд PIN login харуулна
   const [username, setUsername] = useState("");
   const [pin,      setPin]      = useState("");
   const [error,    setError]    = useState("");
   const [showPin,  setShowPin]  = useState(false);
 
-  // PIN login (зөвхөн browser/dev орчинд)
   const PIN_USERS = [
     { id:"oyuns",    name:"Сүрэнжав", username:"oyuns",    pin:"oyun$", color:"#1a56db" },
     { id:"anujin4x", name:"Анужин",   username:"anujin4x", pin:"oyunx", color:"#0e9f6e" },
@@ -1678,7 +1708,6 @@ function LoginScreen({ onLogin }) {
     );
   }
 
-  // Browser орчин — PIN login
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%)",fontFamily:"'Montserrat',sans-serif",padding:"20px"}}>
       <div style={{width:"100%",maxWidth:"340px"}}>
@@ -1725,12 +1754,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [tgChecked,   setTgChecked]   = useState(false);
 
-  // ── Telegram SDK бүрэн ачаалагдсаны дараа ID шалгаж нэвтэрнэ ──
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
 
     if (!tg || !tg.initData) {
-      // Telegram биш (browser) — PIN login руу орно
       setTgChecked(true);
       return;
     }
@@ -1755,6 +1782,7 @@ export default function App() {
     }
     setTgChecked(true);
   }, []);
+
   const [tab, setTab]           = useState("dashboard");
   const [accounts, setAccounts] = useState(() => {
     try { const s=localStorage.getItem("oyuns_accounts"); if(s) return JSON.parse(s); } catch(e) {}
@@ -1772,7 +1800,6 @@ export default function App() {
   const [editDebtData, setEditDebtData] = useState(null);
   const [payDebtData,  setPayDebtData]  = useState(null);
   const [showAddAcc, setShowAddAcc]   = useState(false);
-  // ── АлсТод Хуулга ──
   const [showAlsTod, setShowAlsTod]   = useState(false);
 
   const [financeRows, setFinanceRows] = useState(() => {
@@ -1798,7 +1825,6 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. Үндсэн өгөгдөл ачаална
         const data = await apiGet({ action:"getAll" }, false);
         if (data.ok) {
           if (data.accounts) { setAccounts(data.accounts); localStorage.setItem("oyuns_accounts",JSON.stringify(data.accounts)); }
@@ -1806,7 +1832,6 @@ export default function App() {
           setTx(data.transactions || []);
           setDebts(data.debts || []);
 
-          // 2. АлсТод ББСБ үлдэгдлийг М column-ийн сүүлийн утгаас автоматаар авна
           try {
             const alsTodData = await apiGet({ action:"getAlsTodHuulga" }, false);
             if (alsTodData.ok && alsTodData.balance !== undefined && alsTodData.balance !== null && alsTodData.balance !== 0) {
@@ -1870,7 +1895,6 @@ export default function App() {
   ];
 
   if (!currentUser) {
-    // Telegram SDK ачаалж дуустал хүлээнэ
     if (!tgChecked) {
       return (
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%)"}}>
@@ -1882,7 +1906,6 @@ export default function App() {
       );
     }
 
-    // Telegram дотор байгаа ч ID зөвшөөрөгдөөгүй
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     if (tgUser && !ALLOWED_TG_USERS[tgUser.id]) {
       return (
@@ -1898,13 +1921,13 @@ export default function App() {
       );
     }
 
-    // Browser орчин — PIN login
     return (
       <LoginScreen onLogin={user => {
         setCurrentUser(user);
       }}/>
     );
   }
+
   if (loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f8",fontFamily:"'Montserrat',sans-serif",color:"#475569",fontSize:"15px"}}>Ачааллаж байна...</div>
   );
@@ -1931,10 +1954,8 @@ export default function App() {
             <button onClick={()=>{
               const tg = window.Telegram?.WebApp;
               if (tg && tg.initDataUnsafe?.user) {
-                // Telegram дотор бол апп хаах
                 tg.close();
               } else {
-                // Browser орчинд logout
                 setCurrentUser(null);
               }
             }} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"8px",padding:"6px 10px",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:"11px",fontWeight:700,fontFamily:"inherit"}}>
@@ -1956,9 +1977,8 @@ export default function App() {
         </div>
       )}
 
-      <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto",paddingBottom: winW<640?"80px":"50px"}}>
+      <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto",paddingBottom:winW<640?"80px":"50px"}}>
         {tab==="dashboard" && (<>
-          {/* Нийт үлдэгдэл */}
           <div style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"16px",padding:"16px 18px",marginBottom:"20px",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
             <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"12px"}}>💰 Нийт үлдэгдэл</div>
             <div style={{display:"flex",gap:"20px",flexWrap:"nowrap",overflowX:"auto"}}>
@@ -1976,7 +1996,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Дансууд */}
           {groups.map(({currency,accs})=>accs.length===0?null:(
             <div key={currency} style={{marginBottom:"24px"}}>
               <div style={{display:"flex",alignItems:"center",gap:"7px",marginBottom:"10px"}}>
@@ -1991,7 +2010,6 @@ export default function App() {
                     bal={balances[acc.id]||0}
                     onEdit={setEditBalFor}
                     onViewTx={id => {
-                      // АлсТод дансны хуулгыг тусгай modal-аар харуулна
                       if (id==="als_tod") setShowAlsTod(true);
                       else setViewTxFor(id);
                     }}
@@ -2044,7 +2062,6 @@ export default function App() {
         )}
       </div>
 
-      {/* ── Modals ── */}
       {addTxFor  && <AddTxModal acc={accounts.find(a=>a.id===addTxFor)} onClose={()=>setAddTxFor(null)} onSave={handleSaveTx}/>}
       {viewTxFor && <TxHistoryModal acc={accounts.find(a=>a.id===viewTxFor)} transactions={transactions} onClose={()=>setViewTxFor(null)} onDelete={handleDeleteTx}/>}
       {editBalFor && (
@@ -2106,7 +2123,6 @@ export default function App() {
         />
       )}
 
-      {/* ── АлсТод ББСБ Хуулга Modal ── */}
       {showAlsTod && <AlsTodHuulgaModal onClose={()=>setShowAlsTod(false)}/>}
     </div>
   );
