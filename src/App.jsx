@@ -86,7 +86,7 @@ function fmtUSD(n) {
 
 // ── API ──
 const SCRIPT_URL = "https://oyuns-dashboard.anujin4x.workers.dev";
-const CACHE_TTL  = 5 * 60 * 1000;
+const CACHE_TTL  = 60 * 1000; // 1 минут
 const _cache = {};
 
 async function apiGet(params, forceRefresh = false) {
@@ -409,7 +409,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
               {label:"MNT Rate (1 RUB = ? MNT)",     key:"oyuns_mnt_rate",   val:mntRate,    setter:setMntRate,    hint:`${fR(allRub)} → ${fM(allRubToMnt)}`},
-              {label:"USDT Rate (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
+              {label:"USDT Rate ханш (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
             ].map(({label,key,val,setter,hint}) => (
               <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0"}}>
                 <div>
@@ -546,10 +546,11 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
                 if (isTotal) {
                   const tot = parseFloat(line.replace("__TOTAL__",""));
                   return (
-                    <div key={i} style={{display:"flex",justifyContent:"flex-end",padding:"10px 14px 4px",borderTop:"2px solid "+(tot>=0?"#0e9f6e":"#ef4444"),marginTop:"2px"}}>
-                      <span style={{fontWeight:900,fontSize:"24px",color:tot>=0?"#0e9f6e":"#ef4444",fontFamily:ff,letterSpacing:"0.01em"}}>
+                    <div key={i} style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"12px",padding:"14px 18px",marginTop:"8px",marginLeft:"8px",marginRight:"8px",marginBottom:"4px"}}>
+                      <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"4px",fontFamily:ff}}>Цэвэр үлдэгдэл</div>
+                      <div style={{fontWeight:900,fontSize:"26px",color:tot>=0?"#4ade80":"#fca5a5",lineHeight:1.1,fontFamily:ff}}>
                         {tot>=0?"":"-"}₮{Math.abs(Math.round(tot)).toLocaleString("en-US")}
-                      </span>
+                      </div>
                     </div>
                   );
                 }
@@ -1691,7 +1692,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiGet({ action:"getAll" }, false);
+        const data = await apiGet({ action:"getAll" }, true); // Апп нээгдэхэд үргэлж шинэ өгөгдөл авна
         if (data.ok) {
           if (data.accounts) { setAccounts(data.accounts); localStorage.setItem("oyuns_accounts",JSON.stringify(data.accounts)); }
           const loadedBal = data.balances || DEFAULT_BAL;
@@ -1725,6 +1726,21 @@ export default function App() {
     if (tab !== "finance" && tab !== "calc") return;
     try { const c=localStorage.getItem("oyuns_action=getFinance"); if(c){const{ts}=JSON.parse(c);if(Date.now()-ts<CACHE_TTL)return;} } catch(e) {}
     loadFinance();
+  }, [tab]);
+
+  // debts tab нээгдэхэд шинэ өгөгдөл татах (бот нэмсэн байж болно)
+  useEffect(() => {
+    if (tab !== "debts") return;
+    (async () => {
+      try {
+        const data = await apiGet({ action:"getAll" }, true);
+        if (data.ok) {
+          setDebts(data.debts || []);
+          if (data.accounts) setAccounts(data.accounts);
+          setBalances(prev => ({ ...prev, ...(data.balances || {}) }));
+        }
+      } catch(e) {}
+    })();
   }, [tab]);
 
   async function handleSaveTx(tx) {
