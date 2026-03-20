@@ -518,7 +518,17 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         });
         textLines.push(tDiv());
         textLines.push(`__TOTAL__${netTotal}`);
-        const fullText = textLines.join("\n");
+        // __TOTAL__ мөрийг хүний уншдаг форматаар солих
+        const displayLines = textLines.map(l => {
+          if (l.startsWith("__TOTAL__")) {
+            const tot = parseFloat(l.replace("__TOTAL__",""));
+            const sym = tot >= 0 ? "+" : "−";
+            const n = Math.abs(Math.round(tot)).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+            return `${sym}  ${n.padStart(18)}  MNT`;
+          }
+          return l;
+        });
+        const fullText = displayLines.join("\n");
 
 
         function copyAll() {
