@@ -1711,7 +1711,13 @@ export default function App() {
         </div>
       </div>
 
-      {error       {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй.</div>}      {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй.</div>} <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"12px 14px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>⚠️ Workers холбогдсонгүй</div><div style={{fontSize:"10px",color:"#b45309",fontFamily:"monospace",background:"#fef9c3",borderRadius:"5px",padding:"3px 7px",marginBottom:"8px",wordBreak:"break-all"}}>{error}</div><button onClick={()=>window.location.reload()} style={{background:"#f59e0b",border:"none",borderRadius:"7px",padding:"5px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"#fff",fontFamily:"inherit"}}>🔄 Reload</button></div>}
+      {error && (
+        <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"12px 14px"}}>
+          <div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>Workers холбогдсонгүй</div>
+          <div style={{fontSize:"10px",color:"#b45309",fontFamily:"'Montserrat',sans-serif",background:"#fef9c3",borderRadius:"5px",padding:"3px 7px",marginBottom:"8px",wordBreak:"break-all"}}>{error}</div>
+          <button onClick={()=>window.location.reload()} style={{background:"#f59e0b",border:"none",borderRadius:"7px",padding:"5px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"#fff",fontFamily:"inherit"}}>Дахин оролдох</button>
+        </div>
+      )}
 
       <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto",paddingBottom:winW<640?"80px":"50px"}}>
 
