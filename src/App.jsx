@@ -309,31 +309,39 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
   function fU(n) { return "$"+fN(n,2); }
   function fR(n) { return "₽"+fN(n,0); }
 
-  // ── Copy функц ──
+  // ── Copy функц — задаргааны текст бүтээх ──
   function buildCopyText() {
+    const PAD = 18;
+    function tRow(sign, num, label) {
+      const n = Math.abs(num);
+      const numStr = n.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+      return `${sign}  ${numStr.padStart(PAD)}  ${label}`;
+    }
+    function tDiv() { return " " + "─".repeat(PAD + 6); }
     const lines = [];
-    const pad = (n, s) => String(s).padStart(n);
-    const row = (sign, num, label) => `${sign} ${pad(16, fN(num,2))}  ${label}`;
-    const div = () => " " + "─".repeat(26);
-
-    usdtAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name + " (USDT)")) );
-    lines.push(row("×", rapiraRate, "rapira rate"));
-    lines.push(div());
-    lines.push(row("+", usdtToRub, "RUB"));
-    if(totalRUB) rubAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name)));
-    lines.push(row("×", mntRate, "MNT rate"));
-    lines.push(div());
-    lines.push(row("+", allRubToMnt, "MNT (хөрвүүлэлт)"));
-    mntAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name)));
-    lines.push(div());
-    lines.push(row("+", sub1, ""));
-    avlagaItems.forEach(d => lines.push(row("+", remMNT(d), d.name)));
-    if(avlagaItems.length) { lines.push(div()); lines.push(row("+", sub2, "")); }
-    pendingList.forEach(([cp,v]) => lines.push(row("+", v, cp + " (хүлээгдэж буй)")));
-    if(pendingList.length) { lines.push(div()); lines.push(row("+", sub3, "")); }
-    zeelItems.forEach(d => lines.push(row("-", remMNT(d), d.name)));
-    lines.push(div());
-    lines.push(row("+", netTotal, "MNT  ← ЭЦСИЙН ДҮН"));
+    usdtAccs.forEach(a => lines.push(tRow("+", balances[a.id]||0, a.name + "  (USDT)")));
+    lines.push(tRow("×", rapiraRate, "rapira rate"));
+    lines.push(tDiv());
+    lines.push(tRow("+", usdtToRub, "RUB"));
+    if(totalRUB) rubAccs.forEach(a => lines.push(tRow("+", balances[a.id]||0, a.name)));
+    lines.push(tRow("×", mntRate, "MNT rate"));
+    lines.push(tDiv());
+    lines.push(tRow("+", allRubToMnt, "MNT  (хөрвүүлэлт)"));
+    mntAccs.forEach(a => lines.push(tRow("+", balances[a.id]||0, a.name)));
+    lines.push(tDiv());
+    lines.push(tRow("+", sub1, ""));
+    avlagaItems.forEach(d => lines.push(tRow("+", remMNT(d), d.name)));
+    if(avlagaItems.length) { lines.push(tDiv()); lines.push(tRow("+", sub2, "")); }
+    pendingList.forEach(([cp,v]) => lines.push(tRow("+", v, cp)));
+    if(pendingList.length) { lines.push(tDiv()); lines.push(tRow("+", sub3, "")); }
+    zeelItems.forEach(d => {
+      const r = remOrig(d);
+      const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"";
+      const sub = d.currency==="USDT"?`  (${sym}${fN(r,2)} × ${zeelRate})`:d.currency!=="MNT"?`  (${sym}${fN(r,0)})`:"";
+      lines.push(tRow("−", remMNT(d), d.name + sub));
+    });
+    lines.push(tDiv());
+    lines.push(tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT  ← ЭЦСИЙН ДҮН"));
     return lines.join("\n");
   }
 
@@ -401,7 +409,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
               {label:"MNT Rate (1 RUB = ? MNT)",     key:"oyuns_mnt_rate",   val:mntRate,    setter:setMntRate,    hint:`${fR(allRub)} → ${fM(allRubToMnt)}`},
-              {label:"USDT ханш (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
+              {label:"USDT Rate (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
             ].map(({label,key,val,setter,hint}) => (
               <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0"}}>
                 <div>
@@ -476,29 +484,78 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
       </div>
 
       {/* ── Дэлгэрэнгүй задаргаа ── */}
-      <div style={{background:"#fff",borderRadius:"14px",padding:"14px",marginTop:"12px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5"}}>
-        <div style={{fontSize:"11px",fontWeight:800,color:"#0f172a",marginBottom:"10px",fontFamily:ff}}>Дэлгэрэнгүй задаргаа</div>
-        <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
-          {[
-            {label:"USDT wallet",             val:fU(totalUSDT),   color:"#06b6d4"},
-            {label:`× ${rapiraRate} → RUB`,   val:fR(usdtToRub),   color:"#7e3af2"},
-            {label:`× ${mntRate} → MNT`,      val:fM(allRubToMnt), color:"#7e3af2"},
-            {label:"+ Банкны дансууд",        val:fM(bankMNT),     color:"#1a56db"},
-            {label:"= Нийт баланс",           val:fM(sub1),        color:"#0f172a", bold:true},
-            {label:`+ Авлага (${avlagaItems.length})`, val:fM(avlagaMNT), color:"#0e9f6e"},
-            {label:"= Авлагатай нийт",        val:fM(sub2),        color:"#0f172a", bold:true},
-            {label:`+ Хүлээгдэж буй (${pendingList.length})`, val:fM(pendingDiff), color:"#f59e0b"},
-            {label:"= Нийт",                  val:fM(sub3),        color:"#0f172a", bold:true},
-            {label:`− Зээл (${zeelItems.length})`, val:"−"+fM(zeelMNT), color:"#ef4444"},
-            {label:"Цэвэр үлдэгдэл",      val:fM(netTotal),    color:netTotal>=0?"#0e9f6e":"#ef4444", bold:true},
-          ].map(({label,val,color,bold}) => (
-            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 10px",background:bold?"#f8fafc":"transparent",borderRadius:"7px",borderLeft:bold?`3px solid ${color}`:"3px solid transparent"}}>
-              <span style={{fontSize:"11px",fontWeight:bold?800:500,color:"#334155",fontFamily:ff}}>{label}</span>
-              <span style={{fontSize:"12px",fontWeight:bold?900:600,color,fontFamily:ff}}>{val}</span>
+      {(()=>{
+        // Текст форматтай мөр үүсгэх
+        const PAD = 18;
+        function tRow(sign, num, label) {
+          const n = Math.abs(num);
+          const numStr = n.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+          return `${sign}  ${numStr.padStart(PAD)}  ${label}`;
+        }
+        function tDiv() { return " " + "─".repeat(PAD + 6); }
+
+        const textLines = [];
+        usdtAccs.forEach(a => textLines.push(tRow("+", balances[a.id]||0, a.name + "  (USDT)")));
+        textLines.push(tRow("×", rapiraRate, "rapira rate"));
+        textLines.push(tDiv());
+        textLines.push(tRow("+", usdtToRub, "RUB"));
+        if(totalRUB) rubAccs.forEach(a => textLines.push(tRow("+", balances[a.id]||0, a.name)));
+        textLines.push(tRow("×", mntRate, "MNT rate"));
+        textLines.push(tDiv());
+        textLines.push(tRow("+", allRubToMnt, "MNT  (хөрвүүлэлт)"));
+        mntAccs.forEach(a => textLines.push(tRow("+", balances[a.id]||0, a.name)));
+        textLines.push(tDiv());
+        textLines.push(tRow("+", sub1, ""));
+        avlagaItems.forEach(d => textLines.push(tRow("+", remMNT(d), d.name)));
+        if(avlagaItems.length) { textLines.push(tDiv()); textLines.push(tRow("+", sub2, "")); }
+        pendingList.forEach(([cp,v]) => textLines.push(tRow("+", v, cp)));
+        if(pendingList.length) { textLines.push(tDiv()); textLines.push(tRow("+", sub3, "")); }
+        zeelItems.forEach(d => {
+          const r = remOrig(d);
+          const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"";
+          const sub = d.currency==="USDT" ? `  (${sym}${fN(r,2)} × ${zeelRate})` : d.currency!=="MNT"?`  (${sym}${fN(r,0)})`:"";
+          textLines.push(tRow("−", remMNT(d), d.name + sub));
+        });
+        textLines.push(tDiv());
+        textLines.push(tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT  ← ЭЦСИЙН ДҮН"));
+        const fullText = textLines.join("
+");
+
+        function copyAll() {
+          if(navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(fullText).catch(()=>{});
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = fullText; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+          }
+        }
+
+        return (
+          <div style={{background:"#fff",borderRadius:"14px",marginTop:"12px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5",overflow:"hidden"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",borderBottom:"1px solid #f1f5f9"}}>
+              <span style={{fontSize:"12px",fontWeight:800,color:"#0f172a",fontFamily:ff}}>Дэлгэрэнгүй задаргаа</span>
+              <button onClick={copyAll} style={{background:"#f1f5f9",border:"none",borderRadius:"8px",padding:"5px 12px",cursor:"pointer",fontSize:"11px",fontWeight:700,color:"#475569",fontFamily:ff}}>Хуулах</button>
             </div>
-          ))}
-        </div>
-      </div>
+            <div style={{padding:"12px 14px",overflowX:"auto"}}>
+              <pre style={{margin:0,fontFamily:"'Montserrat',monospace,sans-serif",fontSize:"11px",lineHeight:1.8,color:"#0f172a",whiteSpace:"pre"}}>
+                {textLines.map((line, i) => {
+                  const isDiv   = line.trim().startsWith("─");
+                  const isTotal = !isDiv && line.trim().startsWith("+") && (line.includes("ЭЦСИЙН") || (i > 0 && textLines[i-1].trim().startsWith("─")));
+                  const isNeg   = line.trim().startsWith("−") || line.trim().startsWith("-");
+                  const isMul   = line.trim().startsWith("×");
+                  const color   = isDiv ? "#e2e8f0" : isTotal ? "#0e9f6e" : isNeg ? "#ef4444" : isMul ? "#7e3af2" : "#0f172a";
+                  const weight  = isTotal ? 900 : isDiv ? 400 : 500;
+                  return (
+                    <span key={i} style={{display:"block",color,fontWeight:weight,fontSize:isTotal?"12px":"11px"}}>
+                      {line}
+                    </span>
+                  );
+                })}
+              </pre>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
