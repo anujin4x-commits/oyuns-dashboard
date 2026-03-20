@@ -105,7 +105,8 @@ async function apiGet(params, forceRefresh = false) {
     } catch(e) {}
   }
   const url  = SCRIPT_URL + "?" + new URLSearchParams(params);
-  const res  = await fetch(url, { redirect:"follow", credentials:"omit" });
+  const res  = await fetch(url, { method:"GET", mode:"cors", credentials:"omit", redirect:"follow" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   _cache[key] = { ts: Date.now(), data };
   try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
@@ -212,12 +213,11 @@ function AnimNum({ value, format, duration = 500 }) {
   return <>{fmt2(display)}</>;
 }
 
-function CalcRow({ sign, label, value, sub, isTotal, isSection, indent }) {
+function CalcRow({ sign, label, value, sub, isTotal, indent }) {
   const isNeg = sign === "−";
   const isMul = sign === "×";
-  const textColor = isNeg ? "#ef4444" : isTotal ? "#0f172a" : isSection ? "#64748b" : "#0f172a";
   const signColor = isNeg ? "#ef4444" : isMul ? "#7e3af2" : "#0e9f6e";
-
+  const ff = "'Montserrat', sans-serif";
   return (
     <div style={{
       display:"flex", justifyContent:"space-between", alignItems:"flex-start",
@@ -228,164 +228,166 @@ function CalcRow({ sign, label, value, sub, isTotal, isSection, indent }) {
       borderBottom: "1px solid #f1f5f9",
     }}>
       <div style={{display:"flex",gap:"7px",alignItems:"flex-start",flex:1,minWidth:0}}>
-        {!isSection && (
-          <span style={{fontSize:"12px",fontWeight:900,color:signColor,minWidth:"13px",paddingTop:"1px",fontFamily:"monospace"}}>
-            {sign}
-          </span>
-        )}
+        <span style={{fontSize:"12px",fontWeight:900,color:signColor,minWidth:"13px",paddingTop:"1px",fontFamily:ff}}>{sign}</span>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize: isTotal ? "12px" : "12px", fontWeight: isTotal ? 800 : 500, color: textColor, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
-            {label}
-          </div>
-          {sub && <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"1px"}}>{sub}</div>}
+          <div style={{fontSize:"12px",fontWeight:isTotal?800:500,color:isNeg?"#ef4444":"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:ff}}>{label}</div>
+          {sub && <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"1px",fontFamily:ff}}>{sub}</div>}
         </div>
       </div>
-      <div style={{fontWeight: isTotal ? 900 : 600, fontSize: isTotal ? "13px" : "12px", color: isNeg ? "#ef4444" : isTotal ? "#0f172a" : "#334155", whiteSpace:"nowrap", paddingLeft:"10px", fontFamily:"monospace"}}>
-        {value}
-      </div>
+      <div style={{fontWeight:isTotal?900:600,fontSize:isTotal?"13px":"12px",color:isNeg?"#ef4444":isTotal?"#0f172a":"#334155",whiteSpace:"nowrap",paddingLeft:"10px",fontFamily:ff}}>{value}</div>
     </div>
   );
 }
 
 function CalcDivider({ result }) {
+  const ff = "'Montserrat', sans-serif";
   return (
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 14px",background:"#1a56db08",borderTop:"1.5px solid #1a56db30",borderBottom:"1.5px solid #1a56db30"}}>
-      <div style={{fontSize:"10px",color:"#94a3b8",letterSpacing:"0.05em"}}>{"─".repeat(12)}</div>
-      <div style={{fontWeight:900,fontSize:"14px",color:"#0f172a",fontFamily:"monospace"}}>{result}</div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 14px",background:"#f8fafc",borderTop:"1.5px solid #e2e8f0",borderBottom:"1.5px solid #e2e8f0"}}>
+      <div style={{fontSize:"10px",color:"#94a3b8",fontFamily:ff,fontWeight:600,letterSpacing:"0.04em"}}>нийт</div>
+      <div style={{fontWeight:900,fontSize:"14px",color:"#0f172a",fontFamily:ff}}>{result}</div>
     </div>
   );
 }
 
 function ProfitCalc({ accounts, balances, debts, financeRows }) {
-  // ── Ханш (localStorage-д хадгална) ──
-  const [rapiraRate, setRapiraRate] = useState(() => {
-    try { return Number(localStorage.getItem("oyuns_rapira_rate")) || 82; } catch(e) { return 82; }
-  });
-  const [mntRate, setMntRate] = useState(() => {
-    try { return Number(localStorage.getItem("oyuns_mnt_rate")) || 45.5; } catch(e) { return 45.5; }
-  });
-  const [zeelRate, setZeelRate] = useState(() => {
-    try { return Number(localStorage.getItem("oyuns_zeel_rate")) || 3620; } catch(e) { return 3620; }
-  });
+  const ff = "'Montserrat', sans-serif";
+
+  const [rapiraRate, setRapiraRate] = useState(() => { try { return Number(localStorage.getItem("oyuns_rapira_rate")) || 82; } catch(e) { return 82; } });
+  const [mntRate,    setMntRate]    = useState(() => { try { return Number(localStorage.getItem("oyuns_mnt_rate"))    || 45.5; } catch(e) { return 45.5; } });
+  const [zeelRate,   setZeelRate]   = useState(() => { try { return Number(localStorage.getItem("oyuns_zeel_rate"))   || 3620; } catch(e) { return 3620; } });
   const [rateEditing, setRateEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  function saveRate(key, val, setter) {
-    setter(val);
-    try { localStorage.setItem(key, String(val)); } catch(e) {}
-  }
+  function saveRate(key, val, setter) { setter(val); try { localStorage.setItem(key, String(val)); } catch(e) {} }
 
-  // ── Дансууд валютаар ──
   const usdtAccs = (accounts || []).filter(a => a.currency === "USDT");
   const rubAccs  = (accounts || []).filter(a => a.currency === "RUB");
   const mntAccs  = (accounts || []).filter(a => a.currency === "MNT");
 
-  const totalUSDT = usdtAccs.reduce((s, a) => s + (balances[a.id] || 0), 0);
-  const totalRUB  = rubAccs.reduce((s, a) => s + (balances[a.id] || 0), 0);
-
-  // ── Хөрвүүлэлт ──
+  const totalUSDT   = usdtAccs.reduce((s, a) => s + (balances[a.id] || 0), 0);
+  const totalRUB    = rubAccs.reduce((s, a)  => s + (balances[a.id] || 0), 0);
   const usdtToRub   = totalUSDT * rapiraRate;
   const allRub      = usdtToRub + totalRUB;
   const allRubToMnt = allRub * mntRate;
+  const bankMNT     = mntAccs.reduce((s, a) => s + (balances[a.id] || 0), 0);
+  const sub1        = allRubToMnt + bankMNT;
 
-  // ── MNT банк ──
-  const bankMNT = mntAccs.reduce((s, a) => s + (balances[a.id] || 0), 0);
-  const sub1    = allRubToMnt + bankMNT;
-
-  // ── Авлага / Зээл ──
   const avlagaItems = (debts || []).filter(d => d.debtType === "Авлага" && d.status === "Хүлээгдэж буй");
   const zeelItems   = (debts || []).filter(d => d.debtType === "Зээл"   && d.status === "Хүлээгдэж буй");
 
-  function remOrig(d) {
-    const paid = (d.payments || []).reduce((s, p) => s + Number(p.amount), 0);
-    return Math.max(0, Number(d.amount) - paid);
-  }
-  function remMNT(d) {
-    const r = remOrig(d);
-    if (d.currency === "MNT")  return r;
-    if (d.currency === "RUB")  return r * mntRate;
-    if (d.currency === "USDT") return r * zeelRate;
-    return r;
-  }
+  function remOrig(d) { const paid = (d.payments||[]).reduce((s,p) => s+Number(p.amount), 0); return Math.max(0, Number(d.amount)-paid); }
+  function remMNT(d)  { const r = remOrig(d); if(d.currency==="MNT") return r; if(d.currency==="RUB") return r*mntRate; if(d.currency==="USDT") return r*zeelRate; return r; }
 
   const avlagaMNT = avlagaItems.reduce((s, d) => s + remMNT(d), 0);
   const sub2      = sub1 + avlagaMNT;
 
-  // ── Гүйлгээ tab-ийн хүлээгдэж буй difference ──
-  const pendingDiff = (financeRows || [])
-    .filter(r => r.txStatus === "Хүлээгдэж буй" || r.txStatus === "Хүлээгдэж байгаа")
-    .reduce((s, r) => s + (r.difference || 0), 0);
+  // Хүлээгдэж буй гүйлгээ — харилцагчаар бүлэглэх
+  const pendingRows = (financeRows || []).filter(r => r.txStatus === "Хүлээгдэж буй" || r.txStatus === "Хүлээгдэж байгаа");
+  const pendingByCP = {};
+  pendingRows.forEach(r => {
+    const cp = r.counterparty || "Тодорхойгүй";
+    pendingByCP[cp] = (pendingByCP[cp] || 0) + (r.difference || 0);
+  });
+  const pendingList = Object.entries(pendingByCP).filter(([,v]) => v !== 0).sort((a,b) => b[1]-a[1]);
+  const pendingDiff = pendingList.reduce((s,[,v]) => s+v, 0);
   const sub3 = sub2 + pendingDiff;
 
-  // ── Зээл ──
-  const zeelMNT = zeelItems.reduce((s, d) => s + remMNT(d), 0);
+  const zeelMNT  = zeelItems.reduce((s, d) => s + remMNT(d), 0);
   const netTotal = sub3 - zeelMNT;
 
-  // ── Format helpers ──
-  function fN(n, dec = 2) {
-    if (isNaN(n) || n === null) return "0.00";
-    const fixed = Math.abs(n).toFixed(dec);
-    const parts = fixed.split(".");
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return (n < 0 ? "-" : "") + parts.join(".");
+  function fN(n, dec=2) { if(isNaN(n)||n===null) return "0.00"; const fixed=Math.abs(n).toFixed(dec); const parts=fixed.split("."); parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,","); return (n<0?"-":"")+parts.join("."); }
+  function fM(n) { return "₮"+fN(n,0); }
+  function fU(n) { return "$"+fN(n,2); }
+  function fR(n) { return "₽"+fN(n,0); }
+
+  // ── Copy функц ──
+  function buildCopyText() {
+    const lines = [];
+    const pad = (n, s) => String(s).padStart(n);
+    const row = (sign, num, label) => `${sign} ${pad(16, fN(num,2))}  ${label}`;
+    const div = () => " " + "─".repeat(26);
+
+    usdtAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name + " (USDT)")) );
+    lines.push(row("×", rapiraRate, "rapira rate"));
+    lines.push(div());
+    lines.push(row("+", usdtToRub, "RUB"));
+    if(totalRUB) rubAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name)));
+    lines.push(row("×", mntRate, "MNT rate"));
+    lines.push(div());
+    lines.push(row("+", allRubToMnt, "MNT (хөрвүүлэлт)"));
+    mntAccs.forEach(a => lines.push(row("+", balances[a.id]||0, a.name)));
+    lines.push(div());
+    lines.push(row("+", sub1, ""));
+    avlagaItems.forEach(d => lines.push(row("+", remMNT(d), d.name)));
+    if(avlagaItems.length) { lines.push(div()); lines.push(row("+", sub2, "")); }
+    pendingList.forEach(([cp,v]) => lines.push(row("+", v, cp + " (хүлээгдэж буй)")));
+    if(pendingList.length) { lines.push(div()); lines.push(row("+", sub3, "")); }
+    zeelItems.forEach(d => lines.push(row("-", remMNT(d), d.name)));
+    lines.push(div());
+    lines.push(row("+", netTotal, "MNT  ← ЭЦСИЙН ДҮН"));
+    return lines.join("\n");
   }
-  function fM(n) { return "₮" + fN(n, 0); }
-  function fU(n) { return "$" + fN(n, 2); }
-  function fR(n) { return "₽" + fN(n, 0); }
 
-  const rateInp = {
-    width:"70px", border:"none", outline:"none", fontSize:"14px", fontWeight:800,
-    color:"#1a56db", fontFamily:"monospace", background:"transparent", textAlign:"right",
-  };
+  function handleCopy() {
+    const text = buildCopyText();
+    if(navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    }
+  }
 
-  const todayMNT = (() => {
-    const now = new Date();
-    return `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,"0")}.${String(now.getDate()).padStart(2,"0")}`;
-  })();
+  const todayMNT = (() => { const n=new Date(); return `${n.getFullYear()}.${String(n.getMonth()+1).padStart(2,"0")}.${String(n.getDate()).padStart(2,"0")}`; })();
+  const rateInp  = { width:"70px", border:"none", outline:"none", fontSize:"14px", fontWeight:800, color:"#1a56db", fontFamily:ff, background:"transparent", textAlign:"right" };
 
   return (
-    <div style={{paddingBottom:"60px"}}>
+    <div style={{paddingBottom:"60px",fontFamily:ff}}>
 
       {/* ── Header ── */}
       <div style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"14px",padding:"16px 18px",marginBottom:"12px",boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"4px"}}>
-              🧮 Өдрийн тооцоолол · {todayMNT}
+            <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"4px",fontFamily:ff}}>
+              Өдрийн тооцоолол · {todayMNT}
             </div>
-            <div style={{fontWeight:900,fontSize:"26px",color: netTotal >= 0 ? "#4ade80" : "#fca5a5",lineHeight:1.1,fontFamily:"monospace"}}>
+            <div style={{fontWeight:900,fontSize:"26px",color:netTotal>=0?"#4ade80":"#fca5a5",lineHeight:1.1,fontFamily:ff}}>
               <AnimNum value={netTotal} format={fM}/>
             </div>
-            <div style={{fontSize:"11px",color:"rgba(255,255,255,0.4)",marginTop:"4px"}}>Цэвэр үлдэгдэл</div>
+            <div style={{fontSize:"11px",color:"rgba(255,255,255,0.4)",marginTop:"4px",fontFamily:ff}}>Цэвэр үлдэгдэл</div>
           </div>
-          <button
-            onClick={() => setRateEditing(e => !e)}
-            style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"rgba(255,255,255,0.7)",fontFamily:"inherit"}}
-          >
-            ⚙️ Ханш
-          </button>
+          <div style={{display:"flex",gap:"8px",alignItems:"flex-start"}}>
+            {/* Copy товч */}
+            <button onClick={handleCopy} style={{background:copied?"#0e9f6e":"rgba(255,255,255,0.15)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"#fff",fontFamily:ff,transition:"background 0.2s",whiteSpace:"nowrap"}}>
+              {copied ? "Хуулагдсан" : "Хуулах"}
+            </button>
+            <button onClick={() => setRateEditing(e => !e)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"rgba(255,255,255,0.7)",fontFamily:ff}}>
+              Ханш
+            </button>
+          </div>
         </div>
-
         {/* Mini summary */}
         <div style={{display:"flex",gap:"12px",marginTop:"14px",flexWrap:"wrap"}}>
           {[
-            {label:"Валют→MNT", val:fM(allRubToMnt), color:"#7e3af2"},
-            {label:"Банк данс",  val:fM(bankMNT),     color:"#1a56db"},
-            {label:"Авлага",     val:fM(avlagaMNT),   color:"#0e9f6e"},
-            {label:"Хүлээгдэж буй", val:fM(pendingDiff), color:"#f59e0b"},
-            {label:"Зээл",       val:"−"+fM(zeelMNT), color:"#ef4444"},
+            {label:"Валют→MNT",      val:fM(allRubToMnt),  color:"#7e3af2"},
+            {label:"Банк данс",       val:fM(bankMNT),      color:"#1a56db"},
+            {label:"Авлага",          val:fM(avlagaMNT),    color:"#0e9f6e"},
+            {label:"Хүлээгдэж буй",   val:fM(pendingDiff),  color:"#f59e0b"},
+            {label:"Зээл",            val:"−"+fM(zeelMNT),  color:"#ef4444"},
           ].map(({label,val,color}) => (
             <div key={label}>
-              <div style={{fontSize:"9px",fontWeight:700,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",marginBottom:"2px"}}>{label}</div>
-              <div style={{fontSize:"11px",fontWeight:800,color}}>{val}</div>
+              <div style={{fontSize:"9px",fontWeight:700,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",marginBottom:"2px",fontFamily:ff}}>{label}</div>
+              <div style={{fontSize:"11px",fontWeight:800,color,fontFamily:ff}}>{val}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Ханш тохиргоо (toggle) ── */}
+      {/* ── Ханш тохиргоо ── */}
       {rateEditing && (
         <div style={{background:"#fff",borderRadius:"12px",padding:"14px",marginBottom:"12px",border:"1.5px solid #1a56db30",boxShadow:"0 2px 10px rgba(26,86,219,0.08)"}}>
-          <div style={{fontSize:"11px",fontWeight:800,color:"#1a56db",marginBottom:"12px",textTransform:"uppercase",letterSpacing:"0.06em"}}>⚙️ Ханш тохиргоо</div>
+          <div style={{fontSize:"11px",fontWeight:800,color:"#1a56db",marginBottom:"12px",textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:ff}}>Ханш тохиргоо</div>
           <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
@@ -394,15 +396,10 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             ].map(({label,key,val,setter,hint}) => (
               <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0"}}>
                 <div>
-                  <div style={{fontSize:"11px",fontWeight:700,color:"#334155"}}>{label}</div>
-                  <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px"}}>{hint}</div>
+                  <div style={{fontSize:"11px",fontWeight:700,color:"#334155",fontFamily:ff}}>{label}</div>
+                  <div style={{fontSize:"10px",color:"#94a3b8",marginTop:"2px",fontFamily:ff}}>{hint}</div>
                 </div>
-                <input
-                  type="number"
-                  value={val}
-                  onChange={e => saveRate(key, Number(e.target.value), setter)}
-                  style={rateInp}
-                />
+                <input type="number" value={val} onChange={e => saveRate(key, Number(e.target.value), setter)} style={rateInp}/>
               </div>
             ))}
           </div>
@@ -410,53 +407,37 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
       )}
 
       {/* ── Тооцооллын хүснэгт ── */}
-      <div style={{background:"#fff",borderRadius:"14px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5",fontFamily:"monospace"}}>
+      <div style={{background:"#fff",borderRadius:"14px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5"}}>
 
-        {/* USDT → RUB */}
-        {usdtAccs.map(a => (
-          <CalcRow key={a.id} sign="+" label={a.name} value={fU(balances[a.id]||0)} sub="USDT wallet"/>
-        ))}
+        {/* USDT → RUB → MNT */}
+        {usdtAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fU(balances[a.id]||0)} sub="USDT wallet"/>)}
         <CalcRow sign="×" label={`Rapira rate  ${rapiraRate}`} value={fR(usdtToRub)} sub={`${fU(totalUSDT)} × ${rapiraRate}`}/>
-        {rubAccs.map(a => (
-          <CalcRow key={a.id} sign="+" label={a.name} value={fR(balances[a.id]||0)} sub="RUB данс"/>
-        ))}
+        {rubAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fR(balances[a.id]||0)} sub="RUB данс"/>)}
         <CalcRow sign="×" label={`MNT rate  ${mntRate}`} value={fM(allRubToMnt)} sub={`${fR(allRub)} × ${mntRate}`}/>
         <CalcDivider result={fM(allRubToMnt)}/>
 
-        {/* MNT дансууд */}
-        {mntAccs.map(a => (
-          <CalcRow key={a.id} sign="+" label={a.name} value={fM(balances[a.id]||0)}/>
-        ))}
+        {/* MNT банкны дансууд */}
+        {mntAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fM(balances[a.id]||0)}/>)}
         <CalcDivider result={fM(sub1)}/>
 
         {/* Авлага */}
-        {avlagaItems.length > 0 && (
-          <>
-            {avlagaItems.map(d => {
-              const r = remOrig(d);
-              const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"₮";
-              return (
-                <CalcRow
-                  key={d.id} sign="+"
-                  label={d.name}
-                  value={fM(remMNT(d))}
-                  sub={d.currency!=="MNT" ? `${sym}${fN(r,0)} → MNT` : undefined}
-                />
-              );
-            })}
-            <CalcDivider result={fM(sub2)}/>
-          </>
-        )}
+        {avlagaItems.map(d => {
+          const r = remOrig(d);
+          const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"₮";
+          return <CalcRow key={d.id} sign="+" label={d.name} value={fM(remMNT(d))} sub={d.currency!=="MNT"?`${sym}${fN(r,0)} → MNT`:undefined}/>;
+        })}
+        {avlagaItems.length > 0 && <CalcDivider result={fM(sub2)}/>}
 
-        {/* Гүйлгээ tab — хүлээгдэж буй difference */}
-        {pendingDiff !== 0 && (
+        {/* Хүлээгдэж буй гүйлгээ — харилцагчаар тус бүр */}
+        {pendingList.length > 0 && (
           <>
-            <CalcRow
-              sign="+"
-              label="Хүлээгдэж буй гүйлгээ (зөрүү)"
-              value={fM(pendingDiff)}
-              sub={`${(financeRows||[]).filter(r=>r.txStatus==="Хүлээгдэж буй"||r.txStatus==="Хүлээгдэж байгаа").length} гүйлгээний difference нийлбэр`}
-            />
+            {/* Хэсгийн гарчиг */}
+            <div style={{padding:"6px 14px",background:"#fffbeb",borderBottom:"1px solid #fde68a"}}>
+              <span style={{fontSize:"10px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:ff}}>Хүлээгдэж буй гүйлгээ</span>
+            </div>
+            {pendingList.map(([cp, val]) => (
+              <CalcRow key={cp} sign="+" label={cp} value={fM(val)} sub="зөрүү (difference)"/>
+            ))}
             <CalcDivider result={fM(sub3)}/>
           </>
         )}
@@ -467,9 +448,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             {zeelItems.map(d => {
               const r = remOrig(d);
               const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"";
-              const sub = d.currency==="USDT"
-                ? `${sym}${fN(r,2)} × ${zeelRate} ханш`
-                : d.currency!=="MNT" ? `${sym}${fN(r,0)} → MNT` : undefined;
+              const sub = d.currency==="USDT" ? `${sym}${fN(r,2)} × ${zeelRate} ханш` : d.currency!=="MNT" ? `${sym}${fN(r,0)} → MNT` : undefined;
               return <CalcRow key={d.id} sign="−" label={d.name} value={fM(remMNT(d))} sub={sub}/>;
             })}
           </>
@@ -477,39 +456,35 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
 
         {/* Эцсийн дүн */}
         <div style={{
-          display:"flex", justifyContent:"space-between", alignItems:"center",
-          padding:"14px", background: netTotal >= 0 ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#fff1f2,#fee2e2)",
-          borderTop:"2px solid " + (netTotal >= 0 ? "#0e9f6e" : "#ef4444"),
+          display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 14px",
+          background: netTotal>=0 ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#fff1f2,#fee2e2)",
+          borderTop:"2px solid "+(netTotal>=0?"#0e9f6e":"#ef4444"),
         }}>
-          <div style={{fontSize:"13px",fontWeight:800,color:"#0f172a",fontFamily:"monospace"}}>
-            {"─".repeat(8)} ЭЦСИЙН ДҮН
-          </div>
-          <div style={{fontWeight:900,fontSize:"16px",color: netTotal >= 0 ? "#0e9f6e" : "#ef4444",fontFamily:"monospace"}}>
-            {fM(netTotal)}
-          </div>
+          <div style={{fontSize:"12px",fontWeight:800,color:"#0f172a",fontFamily:ff}}>ЭЦСИЙН ДҮН</div>
+          <div style={{fontWeight:900,fontSize:"18px",color:netTotal>=0?"#0e9f6e":"#ef4444",fontFamily:ff}}>{fM(netTotal)}</div>
         </div>
       </div>
 
-      {/* ── Зөрүү шалгагч ── */}
+      {/* ── Дэлгэрэнгүй задаргаа ── */}
       <div style={{background:"#fff",borderRadius:"14px",padding:"14px",marginTop:"12px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5"}}>
-        <div style={{fontSize:"11px",fontWeight:800,color:"#0f172a",marginBottom:"10px"}}>🔍 Тооцооллын дэлгэрэнгүй</div>
-        <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+        <div style={{fontSize:"11px",fontWeight:800,color:"#0f172a",marginBottom:"10px",fontFamily:ff}}>Дэлгэрэнгүй задаргаа</div>
+        <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
           {[
-            {label:"USDT wallet нийт",       val:fU(totalUSDT),    color:"#06b6d4"},
-            {label:`× ${rapiraRate} → RUB`,   val:fR(usdtToRub),    color:"#7e3af2"},
-            {label:`× ${mntRate} → MNT`,      val:fM(allRubToMnt),  color:"#7e3af2"},
-            {label:"+ Банкны дансууд",        val:fM(bankMNT),      color:"#1a56db"},
-            {label:"= Нийт баланс",           val:fM(sub1),         color:"#0f172a", bold:true},
+            {label:"USDT wallet",             val:fU(totalUSDT),   color:"#06b6d4"},
+            {label:`× ${rapiraRate} → RUB`,   val:fR(usdtToRub),   color:"#7e3af2"},
+            {label:`× ${mntRate} → MNT`,      val:fM(allRubToMnt), color:"#7e3af2"},
+            {label:"+ Банкны дансууд",        val:fM(bankMNT),     color:"#1a56db"},
+            {label:"= Нийт баланс",           val:fM(sub1),        color:"#0f172a", bold:true},
             {label:`+ Авлага (${avlagaItems.length})`, val:fM(avlagaMNT), color:"#0e9f6e"},
-            {label:"= Авлагатай нийт",        val:fM(sub2),         color:"#0f172a", bold:true},
-            {label:"+ Хүлээгдэж буй зөрүү",  val:fM(pendingDiff),  color:"#f59e0b"},
-            {label:"= Нийт (авлага+хүл)",     val:fM(sub3),         color:"#0f172a", bold:true},
+            {label:"= Авлагатай нийт",        val:fM(sub2),        color:"#0f172a", bold:true},
+            {label:`+ Хүлээгдэж буй (${pendingList.length})`, val:fM(pendingDiff), color:"#f59e0b"},
+            {label:"= Нийт",                  val:fM(sub3),        color:"#0f172a", bold:true},
             {label:`− Зээл (${zeelItems.length})`, val:"−"+fM(zeelMNT), color:"#ef4444"},
-            {label:"🏁 Цэвэр үлдэгдэл",      val:fM(netTotal),     color: netTotal>=0?"#0e9f6e":"#ef4444", bold:true},
-          ].map(({label, val, color, bold}) => (
-            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background: bold?"#f8fafc":"transparent",borderRadius:"7px",borderLeft: bold ? `3px solid ${color}` : "3px solid transparent"}}>
-              <span style={{fontSize:"11px",fontWeight: bold ? 800 : 500,color:"#334155"}}>{label}</span>
-              <span style={{fontSize:"12px",fontWeight: bold ? 900 : 600,color,fontFamily:"monospace"}}>{val}</span>
+            {label:"Цэвэр үлдэгдэл",      val:fM(netTotal),    color:netTotal>=0?"#0e9f6e":"#ef4444", bold:true},
+          ].map(({label,val,color,bold}) => (
+            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 10px",background:bold?"#f8fafc":"transparent",borderRadius:"7px",borderLeft:bold?`3px solid ${color}`:"3px solid transparent"}}>
+              <span style={{fontSize:"11px",fontWeight:bold?800:500,color:"#334155",fontFamily:ff}}>{label}</span>
+              <span style={{fontSize:"12px",fontWeight:bold?900:600,color,fontFamily:ff}}>{val}</span>
             </div>
           ))}
         </div>
@@ -1590,7 +1565,7 @@ export default function App() {
     setTgChecked(true);
   }, []);
 
-  const [tab, setTab]           = useState("dashboard");
+  const [tab, setTab]           = useState("calc");
   const [accounts, setAccounts] = useState(() => { try { const s=localStorage.getItem("oyuns_accounts"); if(s) return JSON.parse(s); } catch(e) {} return DEFAULT_ACCOUNTS; });
   const [balances, setBalances] = useState(DEFAULT_BAL);
   const [transactions, setTx]   = useState([]);
@@ -1633,7 +1608,7 @@ export default function App() {
           } catch(e2) {}
           setBalances(loadedBal);
         }
-      } catch(e) { setError(true); }
+      } catch(e) { setError(e.message || "fetch алдаа"); }
       setLoading(false);
     })();
   }, []);
@@ -1697,10 +1672,10 @@ export default function App() {
 
   // Tab-уудын тоо — mobile-д бага байхаар товчилно
   const TABS = [
-    ["dashboard","💼","Данс"],
-    ["debts","📊","Авлага"],
-    ["calc","🧮","Тооцоолол"],
-    ["finance","📈","Гүйлгээ"],
+    ["calc","Тооцоолол"],
+    ["dashboard","Данс"],
+    ["debts","Авлага"],
+    ["finance","Гүйлгээ"],
   ];
 
   return (
@@ -1728,16 +1703,15 @@ export default function App() {
         </div>
         {/* Tabs */}
         <div style={{display:"flex",gap:"2px",background:"rgba(255,255,255,0.12)",borderRadius:"10px",padding:"3px"}}>
-          {TABS.map(([key,icon,label]) => (
-            <button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:"9px 4px",border:"none",borderRadius:"8px",cursor:"pointer",fontWeight:700,fontSize:winW<400?"11px":"12px",fontFamily:"inherit",background:tab===key?"#fff":"transparent",color:tab===key?"#1a56db":"rgba(255,255,255,0.8)",boxShadow:tab===key?"0 1px 4px rgba(0,0,0,0.15)":"none",transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center",gap:"3px"}}>
-              <span>{icon}</span>
-              <span style={{display:winW<380?"none":"inline"}}>{label}</span>
+          {TABS.map(([key,label]) => (
+            <button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:"9px 4px",border:"none",borderRadius:"8px",cursor:"pointer",fontWeight:700,fontSize:winW<400?"11px":"12px",fontFamily:"inherit",background:tab===key?"#fff":"transparent",color:tab===key?"#1a56db":"rgba(255,255,255,0.8)",boxShadow:tab===key?"0 1px 4px rgba(0,0,0,0.15)":"none",transition:"all 0.15s"}}>
+              {label}
             </button>
           ))}
         </div>
       </div>
 
-      {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй.</div>}
+      {error       {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй.</div>}      {error && <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"10px 14px",fontSize:"13px",color:"#92400e"}}>⚠️ Google Sheets холбогдож чадсангүй.</div>} <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:"10px",margin:"12px 16px 0",padding:"12px 14px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#92400e",marginBottom:"4px"}}>⚠️ Workers холбогдсонгүй</div><div style={{fontSize:"10px",color:"#b45309",fontFamily:"monospace",background:"#fef9c3",borderRadius:"5px",padding:"3px 7px",marginBottom:"8px",wordBreak:"break-all"}}>{error}</div><button onClick={()=>window.location.reload()} style={{background:"#f59e0b",border:"none",borderRadius:"7px",padding:"5px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"#fff",fontFamily:"inherit"}}>🔄 Reload</button></div>}
 
       <div style={{padding:winW<640?"8px":"16px",maxWidth:tab==="finance"?"1200px":"560px",margin:"0 auto",paddingBottom:winW<640?"80px":"50px"}}>
 
