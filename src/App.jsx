@@ -518,8 +518,8 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         });
         textLines.push(tDiv());
         textLines.push(tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT  ← ЭЦСИЙН ДҮН"));
-        const fullText = textLines.join("
-");
+        const fullText = textLines.join("\n");
+
 
         function copyAll() {
           if(navigator.clipboard?.writeText) {
