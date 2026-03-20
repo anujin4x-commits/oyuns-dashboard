@@ -341,7 +341,8 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
       lines.push(tRow("−", remMNT(d), d.name + sub));
     });
     lines.push(tDiv());
-    lines.push(tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT  ← ЭЦСИЙН ДҮН"));
+    lines.push(tDiv());
+    lines.push(`  ЭЦСИЙН ДҮН  (${tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT").trim()})`);
     return lines.join("\n");
   }
 
@@ -517,7 +518,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
           textLines.push(tRow("−", remMNT(d), d.name + sub));
         });
         textLines.push(tDiv());
-        textLines.push(tRow(netTotal>=0?"+":"−", Math.abs(netTotal), "MNT  ← ЭЦСИЙН ДҮН"));
+        textLines.push(`  [ ЭЦСИЙН ДҮН:  ${(()=>{const n=Math.abs(netTotal);const s=n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});return (netTotal>=0?"":"-")+s;})()}  MNT ]`);
         const fullText = textLines.join("\n");
 
 
@@ -540,13 +541,20 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
               <pre style={{margin:0,fontFamily:"'Montserrat',monospace,sans-serif",fontSize:"11px",lineHeight:1.8,color:"#0f172a",whiteSpace:"pre"}}>
                 {textLines.map((line, i) => {
                   const isDiv   = line.trim().startsWith("─");
-                  const isTotal = !isDiv && line.trim().startsWith("+") && (line.includes("ЭЦСИЙН") || (i > 0 && textLines[i-1].trim().startsWith("─")));
-                  const isNeg   = line.trim().startsWith("−") || line.trim().startsWith("-");
+                  const isTotal = line.includes("ЭЦСИЙН ДҮН");
+                  const isNeg   = !isTotal && (line.trim().startsWith("−") || line.trim().startsWith("-"));
                   const isMul   = line.trim().startsWith("×");
-                  const color   = isDiv ? "#e2e8f0" : isTotal ? "#0e9f6e" : isNeg ? "#ef4444" : isMul ? "#7e3af2" : "#0f172a";
-                  const weight  = isTotal ? 900 : isDiv ? 400 : 500;
+                  const color   = isDiv ? "#e2e8f0" : isNeg ? "#ef4444" : isMul ? "#7e3af2" : "#0f172a";
+                  const weight  = isDiv ? 400 : 500;
+                  if (isTotal) {
+                    return (
+                      <span key={i} style={{display:"block",marginTop:"6px",padding:"8px 10px",borderRadius:"8px",background:netTotal>=0?"#f0fdf4":"#fff1f2",border:`1.5px solid ${netTotal>=0?"#0e9f6e":"#ef4444"}`,color:netTotal>=0?"#065f46":"#991b1b",fontWeight:900,fontSize:"13px",letterSpacing:"0.02em",fontFamily:ff}}>
+                        {line}
+                      </span>
+                    );
+                  }
                   return (
-                    <span key={i} style={{display:"block",color,fontWeight:weight,fontSize:isTotal?"12px":"11px"}}>
+                    <span key={i} style={{display:"block",color,fontWeight:weight,fontSize:"11px"}}>
                       {line}
                     </span>
                   );
