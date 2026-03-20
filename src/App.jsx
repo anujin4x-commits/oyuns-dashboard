@@ -536,30 +536,52 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
               <span style={{fontSize:"12px",fontWeight:800,color:"#0f172a",fontFamily:ff}}>Дэлгэрэнгүй задаргаа</span>
               <button onClick={copyAll} style={{background:"#f1f5f9",border:"none",borderRadius:"8px",padding:"5px 12px",cursor:"pointer",fontSize:"11px",fontWeight:700,color:"#475569",fontFamily:ff}}>Хуулах</button>
             </div>
-            <div style={{padding:"12px 14px",overflowX:"auto"}}>
-              <pre style={{margin:0,fontFamily:"'Montserrat',monospace,sans-serif",fontSize:"11px",lineHeight:1.8,color:"#0f172a",whiteSpace:"pre"}}>
-                {textLines.map((line, i) => {
-                  const isDiv   = line.trim().startsWith("─");
-                  const isTotal = line.startsWith("__TOTAL__");
-                  const isNeg   = !isTotal && (line.trim().startsWith("−") || line.trim().startsWith("-"));
-                  const isMul   = line.trim().startsWith("×");
-                  const color   = isDiv ? "#e2e8f0" : isNeg ? "#ef4444" : isMul ? "#7e3af2" : "#0f172a";
-                  const weight  = isDiv ? 400 : 500;
-                  if (isTotal) {
-                    const tot = parseFloat(line.replace("__TOTAL__",""));
-                    return (
-                      <span key={i} style={{display:"block",marginTop:"8px",fontWeight:900,fontSize:"22px",color:tot>=0?"#0e9f6e":"#ef4444",fontFamily:ff,letterSpacing:"0.01em"}}>
+            <div style={{padding:"8px 0"}}>
+              {textLines.map((line, i) => {
+                const isDiv   = line.trim().startsWith("─");
+                const isTotal = line.startsWith("__TOTAL__");
+                const isNeg   = !isTotal && (line.trim().startsWith("−") || line.trim().startsWith("-"));
+                const isMul   = line.trim().startsWith("×");
+
+                if (isTotal) {
+                  const tot = parseFloat(line.replace("__TOTAL__",""));
+                  return (
+                    <div key={i} style={{display:"flex",justifyContent:"flex-end",padding:"10px 14px 4px",borderTop:"2px solid "+(tot>=0?"#0e9f6e":"#ef4444"),marginTop:"2px"}}>
+                      <span style={{fontWeight:900,fontSize:"24px",color:tot>=0?"#0e9f6e":"#ef4444",fontFamily:ff,letterSpacing:"0.01em"}}>
                         {tot>=0?"":"-"}₮{Math.abs(Math.round(tot)).toLocaleString("en-US")}
                       </span>
-                    );
-                  }
-                  return (
-                    <span key={i} style={{display:"block",color,fontWeight:weight,fontSize:"11px"}}>
-                      {line}
-                    </span>
+                    </div>
                   );
-                })}
-              </pre>
+                }
+                if (isDiv) {
+                  return <div key={i} style={{height:"1px",background:"#e2e8f0",margin:"2px 14px"}}/>;
+                }
+
+                // Мөрийг sign + label + value гэж задлах
+                // Format: "sign  value  label" эсвэл "×  value  label"
+                const trimmed = line.trim();
+                const signChar = trimmed[0];
+                const isValidSign = ["+","−","-","×"].includes(signChar);
+                const signColor = signChar==="−"||signChar==="-" ? "#ef4444" : signChar==="×" ? "#7e3af2" : "#0e9f6e";
+
+                // Value болон label-г ялгах: 2+ зай хооронд
+                const rest = trimmed.slice(1).trim();
+                const spaceIdx = rest.search(/\s{2,}/);
+                const valStr   = spaceIdx>=0 ? rest.slice(0, spaceIdx).trim() : rest;
+                const labelStr = spaceIdx>=0 ? rest.slice(spaceIdx).trim() : "";
+
+                return (
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"3px 14px",borderBottom:"1px solid #f8fafc"}}>
+                    <span style={{fontSize:"11px",fontWeight:500,color:"#475569",fontFamily:ff,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:"8px"}}>
+                      {isValidSign && <span style={{color:signColor,fontWeight:700,marginRight:"5px"}}>{signChar}</span>}
+                      {labelStr || (isValidSign?"":trimmed)}
+                    </span>
+                    <span style={{fontSize:"12px",fontWeight:600,color:signChar==="−"||signChar==="-"?"#ef4444":"#0f172a",fontFamily:ff,whiteSpace:"nowrap",textAlign:"right"}}>
+                      {valStr}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
