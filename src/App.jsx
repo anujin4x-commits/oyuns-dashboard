@@ -213,6 +213,15 @@ function AnimNum({ value, format, duration = 500 }) {
   return <>{fmt2(display)}</>;
 }
 
+function SectionLabel({ text, color }) {
+  const ff = "'Montserrat', sans-serif";
+  return (
+    <div style={{padding:"6px 14px 5px", background: color + "0d", borderBottom: "1px solid " + color + "25", borderTop: "1px solid " + color + "20"}}>
+      <span style={{fontSize:"10px", fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.07em", fontFamily:ff}}>{text}</span>
+    </div>
+  );
+}
+
 function CalcRow({ sign, label, value, sub, isTotal, indent }) {
   const isNeg = sign === "−";
   const isMul = sign === "×";
@@ -409,7 +418,8 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
       {/* ── Тооцооллын хүснэгт ── */}
       <div style={{background:"#fff",borderRadius:"14px",overflow:"hidden",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #e8edf5"}}>
 
-        {/* USDT → RUB → MNT */}
+        {/* Валют хөрвүүлэлт */}
+        <SectionLabel text="Валют хөрвүүлэлт" color="#7e3af2"/>
         {usdtAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fU(balances[a.id]||0)} sub="USDT wallet"/>)}
         <CalcRow sign="×" label={`Rapira rate  ${rapiraRate}`} value={fR(usdtToRub)} sub={`${fU(totalUSDT)} × ${rapiraRate}`}/>
         {rubAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fR(balances[a.id]||0)} sub="RUB данс"/>)}
@@ -417,10 +427,12 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         <CalcDivider result={fM(allRubToMnt)}/>
 
         {/* MNT банкны дансууд */}
+        <SectionLabel text="Банкны дансууд" color="#1a56db"/>
         {mntAccs.map(a => <CalcRow key={a.id} sign="+" label={a.name} value={fM(balances[a.id]||0)}/>)}
         <CalcDivider result={fM(sub1)}/>
 
         {/* Авлага */}
+        {avlagaItems.length > 0 && <SectionLabel text="Авлага" color="#0e9f6e"/>}
         {avlagaItems.map(d => {
           const r = remOrig(d);
           const sym = d.currency==="USDT"?"$":d.currency==="RUB"?"₽":"₮";
@@ -431,10 +443,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         {/* Хүлээгдэж буй гүйлгээ — харилцагчаар тус бүр */}
         {pendingList.length > 0 && (
           <>
-            {/* Хэсгийн гарчиг */}
-            <div style={{padding:"6px 14px",background:"#fffbeb",borderBottom:"1px solid #fde68a"}}>
-              <span style={{fontSize:"10px",fontWeight:700,color:"#d97706",textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:ff}}>Хүлээгдэж буй гүйлгээ</span>
-            </div>
+            <SectionLabel text="Хүлээгдэж буй гүйлгээ" color="#f59e0b"/>
             {pendingList.map(([cp, val]) => (
               <CalcRow key={cp} sign="+" label={cp} value={fM(val)} sub="зөрүү (difference)"/>
             ))}
@@ -443,6 +452,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         )}
 
         {/* Зээл */}
+        {zeelItems.length > 0 && <SectionLabel text="Зээл / Өглөг" color="#ef4444"/>}
         {zeelItems.length > 0 && (
           <>
             {zeelItems.map(d => {
