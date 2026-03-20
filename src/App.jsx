@@ -401,7 +401,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
               {label:"MNT Rate (1 RUB = ? MNT)",     key:"oyuns_mnt_rate",   val:mntRate,    setter:setMntRate,    hint:`${fR(allRub)} → ${fM(allRubToMnt)}`},
-              {label:"USDT Зээл ханш (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
+              {label:"USDT ханш (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
             ].map(({label,key,val,setter,hint}) => (
               <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0"}}>
                 <div>
@@ -452,7 +452,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
         )}
 
         {/* Зээл */}
-        {zeelItems.length > 0 && <SectionLabel text="Зээл / Өглөг" color="#ef4444"/>}
+        {zeelItems.length > 0 && <SectionLabel text="Зээл" color="#ef4444"/>}
         {zeelItems.length > 0 && (
           <>
             {zeelItems.map(d => {
