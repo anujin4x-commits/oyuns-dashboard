@@ -409,7 +409,7 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
               {label:"MNT Rate (1 RUB = ? MNT)",     key:"oyuns_mnt_rate",   val:mntRate,    setter:setMntRate,    hint:`${fR(allRub)} → ${fM(allRubToMnt)}`},
-              {label:"USDT Rate ханш (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
+              {label:"USDT Rate (1 USDT = ? MNT)", key:"oyuns_zeel_rate", val:zeelRate, setter:setZeelRate,  hint:"USDT зээлд"},
             ].map(({label,key,val,setter,hint}) => (
               <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0"}}>
                 <div>
@@ -546,9 +546,15 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
                 if (isTotal) {
                   const tot = parseFloat(line.replace("__TOTAL__",""));
                   return (
-                    <div key={i} style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",borderRadius:"12px",padding:"14px 18px",marginTop:"8px",marginLeft:"8px",marginRight:"8px",marginBottom:"4px"}}>
-                      <div style={{fontSize:"10px",fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"4px",fontFamily:ff}}>Цэвэр үлдэгдэл</div>
-                      <div style={{fontWeight:900,fontSize:"26px",color:tot>=0?"#4ade80":"#fca5a5",lineHeight:1.1,fontFamily:ff}}>
+                    <div key={i} style={{
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"14px 14px",
+                      background: tot>=0 ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#fff1f2,#fee2e2)",
+                      borderTop:"2px solid "+(tot>=0?"#0e9f6e":"#ef4444"),
+                      marginTop:"4px",
+                    }}>
+                      <div style={{fontSize:"12px",fontWeight:800,color:"#0f172a",fontFamily:ff}}>ЭЦСИЙН ДҮН</div>
+                      <div style={{fontWeight:900,fontSize:"18px",color:tot>=0?"#0e9f6e":"#ef4444",fontFamily:ff}}>
                         {tot>=0?"":"-"}₮{Math.abs(Math.round(tot)).toLocaleString("en-US")}
                       </div>
                     </div>
