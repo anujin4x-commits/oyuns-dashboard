@@ -261,13 +261,53 @@ function CalcDivider({ result }) {
 function ProfitCalc({ accounts, balances, debts, financeRows }) {
   const ff = "'Montserrat', sans-serif";
 
+  // localStorage-аас fallback утга авах
   const [rapiraRate, setRapiraRate] = useState(() => { try { return Number(localStorage.getItem("oyuns_rapira_rate")) || 82; } catch(e) { return 82; } });
   const [mntRate,    setMntRate]    = useState(() => { try { return Number(localStorage.getItem("oyuns_mnt_rate"))    || 45.5; } catch(e) { return 45.5; } });
   const [zeelRate,   setZeelRate]   = useState(() => { try { return Number(localStorage.getItem("oyuns_zeel_rate"))   || 3620; } catch(e) { return 3620; } });
   const [rateEditing, setRateEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [ratesSaved, setRatesSaved]   = useState(false);
 
-  function saveRate(key, val, setter) { setter(val); try { localStorage.setItem(key, String(val)); } catch(e) {} }
+  // Spinner CSS нэмэх (нэг удаа)
+  useEffect(() => {
+    if (!document.getElementById("oyuns-spin-style")) {
+      const s = document.createElement("style");
+      s.id = "oyuns-spin-style";
+      s.textContent = "@keyframes oyunsSpin{to{transform:rotate(360deg)}}";
+      document.head.appendChild(s);
+    }
+  }, []);
+
+  // Компонент mount үед Apps Script-аас ханш татах
+  useEffect(() => {
+    (async () => {
+      setRatesLoading(true);
+      try {
+        const data = await apiGet({ action: "getRates" }, false);
+        if (data.ok) {
+          const r = Number(data.rapiraRate) || 82;
+          const m = Number(data.mntRate)    || 45.5;
+          const z = Number(data.zeelRate)   || 3620;
+          setRapiraRate(r); setMntRate(m); setZeelRate(z);
+          // localStorage-д бас кэш хийнэ (offline fallback)
+          try { localStorage.setItem("oyuns_rapira_rate", r); localStorage.setItem("oyuns_mnt_rate", m); localStorage.setItem("oyuns_zeel_rate", z); } catch(e) {}
+        }
+      } catch(e) {}
+      setRatesLoading(false);
+    })();
+  }, []);
+
+  // Ханш хадгалах — Apps Script руу POST, localStorage-д бас
+  function saveRate(key, val, setter) {
+    setter(val);
+    try { localStorage.setItem(key, String(val)); } catch(e) {}
+    const keyMap = { oyuns_rapira_rate:"rapiraRate", oyuns_mnt_rate:"mntRate", oyuns_zeel_rate:"zeelRate" };
+    apiPost({ action:"setRate", key: keyMap[key], value: val })
+      .then(() => { setRatesSaved(true); setTimeout(() => setRatesSaved(false), 2000); })
+      .catch(() => {});
+  }
 
   const usdtAccs = (accounts || []).filter(a => a.currency === "USDT");
   const rubAccs  = (accounts || []).filter(a => a.currency === "RUB");
@@ -379,8 +419,9 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
             <button onClick={handleCopy} style={{background:copied?"#0e9f6e":"rgba(255,255,255,0.15)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"#fff",fontFamily:ff,transition:"background 0.2s",whiteSpace:"nowrap"}}>
               {copied ? "Хуулагдсан" : "Хуулах"}
             </button>
-            <button onClick={() => setRateEditing(e => !e)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"rgba(255,255,255,0.7)",fontFamily:ff}}>
-              Ханш
+            <button onClick={() => setRateEditing(e => !e)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:"10px",padding:"8px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700,color:"rgba(255,255,255,0.7)",fontFamily:ff,display:"flex",alignItems:"center",gap:"6px"}}>
+              {ratesLoading && <span style={{width:"10px",height:"10px",border:"1.5px solid rgba(255,255,255,0.3)",borderTop:"1.5px solid #fff",borderRadius:"50%",display:"inline-block",animation:"oyunsSpin 0.8s linear infinite"}}/>}
+              Ханш{ratesLoading ? "" : ratesSaved ? " ✓" : ""}
             </button>
           </div>
         </div>
@@ -404,7 +445,13 @@ function ProfitCalc({ accounts, balances, debts, financeRows }) {
       {/* ── Ханш тохиргоо ── */}
       {rateEditing && (
         <div style={{background:"#fff",borderRadius:"12px",padding:"14px",marginBottom:"12px",border:"1.5px solid #1a56db30",boxShadow:"0 2px 10px rgba(26,86,219,0.08)"}}>
-          <div style={{fontSize:"11px",fontWeight:800,color:"#1a56db",marginBottom:"12px",textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:ff}}>Ханш тохиргоо</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+            <div style={{fontSize:"11px",fontWeight:800,color:"#1a56db",textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:ff}}>
+              {ratesLoading ? "Ханш ачааллаж байна..." : ratesSaved ? "Хадгалагдлаа" : "Ханш тохиргоо"}
+            </div>
+            {ratesLoading && <div style={{width:"14px",height:"14px",border:"2px solid #1a56db30",borderTop:"2px solid #1a56db",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>}
+            {ratesSaved && <div style={{fontSize:"11px",color:"#0e9f6e",fontWeight:700,fontFamily:ff}}>Хадгалагдлаа</div>}
+          </div>
           <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
             {[
               {label:"Rapira Rate (1 USDT = ? RUB)", key:"oyuns_rapira_rate", val:rapiraRate, setter:setRapiraRate, hint:`${fU(totalUSDT)} → ${fR(usdtToRub)}`},
@@ -1740,6 +1787,20 @@ export default function App() {
 
   useEffect(() => {
     if (tab !== "finance" && tab !== "calc") return;
+    if (tab === "calc") {
+      // Тооцоолол tab нээхэд АлсТод болон finance шинэчлэх
+      (async () => {
+        try {
+          const alsTodData = await apiGet({ action:"getAlsTodHuulga" }, true); // force
+          if (alsTodData.ok && alsTodData.balance) {
+            setBalances(prev => ({ ...prev, als_tod: Math.round(Number(alsTodData.balance)) }));
+          }
+        } catch(e) {}
+      })();
+      // financeRows бас шинэчлэх
+      loadFinance(true);
+      return;
+    }
     try { const c=localStorage.getItem("oyuns_action=getFinance"); if(c){const{ts}=JSON.parse(c);if(Date.now()-ts<CACHE_TTL)return;} } catch(e) {}
     loadFinance();
   }, [tab]);
@@ -1753,7 +1814,16 @@ export default function App() {
         if (data.ok) {
           setDebts(data.debts || []);
           if (data.accounts) setAccounts(data.accounts);
-          setBalances(prev => ({ ...prev, ...(data.balances || {}) }));
+          // als_tod-г Properties-ийн утгаар дарж бичихгүй — хуулгаас авсан утгыг хадгалах
+          if (data.balances) {
+            setBalances(prev => {
+              const nb = { ...prev };
+              Object.entries(data.balances).forEach(([k, v]) => {
+                if (k !== "als_tod") nb[k] = v; // als_tod-г орхино
+              });
+              return nb;
+            });
+          }
         }
       } catch(e) {}
     })();
@@ -1927,10 +1997,33 @@ export default function App() {
       {viewTxFor  && <TxHistoryModal acc={accounts.find(a=>a.id===viewTxFor)} transactions={transactions} onClose={()=>setViewTxFor(null)} onDelete={handleDeleteTx}/>}
       {editBalFor && <EditBalModal acc={accounts.find(a=>a.id===editBalFor)} bal={balances[editBalFor]||0} onClose={()=>setEditBalFor(null)}
         onSave={async(id,newVal,oldVal,note)=>{
+          // UI-д шинэ утга харуулна
           setBalances(prev=>({...prev,[id]:newVal}));
-          await apiPost({action:"setBalance",accountId:id,value:newVal});
-          const diff=newVal-oldVal;
-          if(diff!==0){const balAcc=accounts.find(a=>a.id===id);const tx={id:Date.now().toString(),accountId:id,accountName:balAcc?balAcc.name:id,createdBy:currentUser?.name||"",type:diff>0?"Орлого":"Зарлага",amount:Math.abs(diff),date:new Date().toISOString().slice(0,10),counterparty:"Үлдэгдэл засварлалт",rate:"",ratePairLabel:"",convertedAmount:null,convertedCurrency:"",note:note||`Өмнөх: ${oldVal.toLocaleString("en-US",{minimumFractionDigits:2})} → Шинэ: ${newVal.toLocaleString("en-US",{minimumFractionDigits:2})}`};setTx(prev=>[...prev,tx]);await apiPost({action:"addTransaction",data:tx});}
+          // als_tod хуулгаас авдаг тул Properties-д бичихгүй
+          if (id !== "als_tod") {
+            await apiPost({action:"setBalance",accountId:id,value:newVal});
+          }
+          // Transaction нэмэхгүй — setBalance аль хэдийн зөв утгыг Properties-д
+          // хадгалсан тул addTransaction дахин баланс өөрчлөхгүй байх ёстой.
+          // Зөвхөн transaction түүхэнд бичих (баланс өөрчлөхгүй тусгай flag-тай)
+          const diff = newVal - oldVal;
+          if (diff !== 0) {
+            const balAcc = accounts.find(a=>a.id===id);
+            const tx = {
+              id: Date.now().toString(), accountId: id,
+              accountName: balAcc ? balAcc.name : id,
+              createdBy: currentUser?.name||"",
+              type: diff>0?"Орлого":"Зарлага",
+              amount: Math.abs(diff),
+              date: new Date().toISOString().slice(0,10),
+              counterparty: "Үлдэгдэл засварлалт",
+              rate:"", ratePairLabel:"", convertedAmount:null, convertedCurrency:"",
+              note: note||`Өмнөх: ${oldVal.toLocaleString("en-US",{minimumFractionDigits:2})} → Шинэ: ${newVal.toLocaleString("en-US",{minimumFractionDigits:2})}`,
+              noBalanceUpdate: true, // Apps Script-д баланс дахин өөрчлөхгүй
+            };
+            setTx(prev=>[...prev,tx]);
+            await apiPost({action:"addTransactionNoBalance",data:tx});
+          }
         }}/>}
       {showDebt && <AddDebtModal onClose={()=>setShowDebt(false)} onSave={async d=>{setDebts(prev=>[...prev,d]);await apiPost({action:"addDebt",data:d});}}/>}
       {editDebtData && <AddDebtModal editData={editDebtData} onClose={()=>setEditDebtData(null)} onSave={async d=>{setDebts(prev=>prev.map(x=>x.id===d.id?d:x));await apiPost({action:"updateDebt",data:d});setEditDebtData(null);}}/>}
